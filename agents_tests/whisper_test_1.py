@@ -1,14 +1,12 @@
-"""
-pip install --upgrade openai requests
-export OPENAI_API_KEY="sk-..."   # or set another way
-"""
-
 import os
 import tempfile
 import requests
+from dotenv import load_dotenv
 from openai import OpenAI
 
-client = OpenAI()                       # uses OPENAI_API_KEY from env
+load_dotenv()                                   # ① read .env into the process
+# Now os.getenv("OPENAI_API_KEY") is set
+client = OpenAI()         
 
 def transcribe_from_url(audio_url: str) -> str:
     """
@@ -38,5 +36,5 @@ def transcribe_from_url(audio_url: str) -> str:
 
 # ---- example usage ----
 if __name__ == "__main__":
-    url = "https://cdn.example.com/podcast/episode45.mp3"
+    url = "https://ttsreader.com/images/avatars/adam.mp3"
     print(transcribe_from_url(url))
