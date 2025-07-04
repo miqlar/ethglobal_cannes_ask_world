@@ -1,0 +1,204 @@
+python_tests/venv/*
+
+########################
+# ️⚙️  Core Git & tools #
+########################
+# Never commit your own repo or ignore file!
+.git/
+# Patch/merge cruft
+*.orig
+*.rej
+
+########################################
+# 🖥  Operating-system cruft           #
+########################################
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+# Linux / editors
+*~
+.nfs*
+
+########################################
+# 🗂  Editors & IDEs                   #
+########################################
+# VS Code
+.vscode/*
+!.vscode/{settings,extensions,tasks,launch}.json
+.history/
+# JetBrains (IntelliJ IDEA, PyCharm, WebStorm, …)
+.idea/
+*.iml
+#.iws (legacy)
+# Eclipse
+.project
+.classpath
+.settings/
+.c9/
+.metadata/
+bin/
+tmp/
+# Xcode
+*.xcworkspace
+xcuserdata/
+DerivedData/
+*.xcodeproj/*
+# Vim / Emacs / Sublime swap files
+*.sw?
+*.swo
+*.swn
+*.sublime-workspace
+*.sublime-project
+
+########################################
+# 🌐 Node / JavaScript / TypeScript    #
+########################################
+node_modules/
+bower_components/
+dist/
+build/
+coverage/
+.env
+.env.*
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+.vitest/
+.nyc_output/
+
+########################################
+# 🐍 Python                           #
+########################################
+__pycache__/
+*.py[cod]
+*.so
+*.pyd
+*.egg-info/
+build/
+dist/
+.eggs/
+pip-wheel-metadata/
+.tox/
+.coverage*
+htmlcov/
+.pytest_cache/
+.cache/
+.mypy_cache/
+.pytype/
+.pyre/
+.env/
+.venv/
+venv/
+ENV/
+env/
+
+########################################
+# ☕️ Java & JVM build tools            #
+########################################
+# Maven
+target/
+.mvn/
+# Gradle
+.gradle/
+build/
+out/
+# Kotlin/Java IDE artifacts
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+
+########################################
+# 🦀 Rust                              #
+########################################
+/target/
+Cargo.lock
+
+########################################
+# 🐹 Go                                #
+########################################
+bin/
+pkg/
+*.test
+coverage.out
+
+########################################
+# 🦄 C / C++ / CMake                   #
+########################################
+*.o
+*.obj
+*.exe
+*.dll
+*.lib
+*.so
+*.a
+*.out
+build/
+cmake-build-*/
+
+########################################
+# 📱 Mobile & Game engines             #
+########################################
+# Android / Kotlin Multiplatform
+local.properties
+*.iml
+*/build/
+# Swift / iOS
+*.ipa
+*.xcuserstate
+# Unity
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild*/
+Assets/AssetStoreTools*
+
+########################################
+# 🗄 Databases & data                  #
+########################################
+*.sqlite*
+*.db
+*.db3
+*.sql
+*.realm
+*.rdb
+*.log
+
+########################################
+# 🗃 Logs, temp, & miscellaneous       #
+########################################
+*.log
+logs/
+*.tmp
+*.temp
+*.bak
+*.lock
+.lock-wscript
+# Archives
+*.zip
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+# Office & binary docs (usually shouldn’t live in Git)
+*.doc?
+*.xls?
+*.ppt?
+*.pdf
+# Assets (add if you treat builds as deploy artifacts)
+# *.png
+# *.jpg
+# *.jpeg
+# *.gif
+# *.bmp
+# *.tiff
+
