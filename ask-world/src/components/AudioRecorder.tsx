@@ -220,7 +220,7 @@ export default function AudioRecorder() {
             // Prepare parameters for askQuestion function
             const prompt = question.trim();
             const answersNeeded = maxSubmissions.trim() ? parseInt(maxSubmissions) : 1;
-            const value = "1"; // Send 1 wei as requested
+            const value = "0x0000000000000000000000000000000000000000000000000000000000000001"; // Send 1 wei as requested
 
             // Send transaction to contract
             const result = await MiniKit.commands.sendTransaction({
