@@ -7,7 +7,7 @@ import requests
 from uagents import Context, Protocol
 from walrus_operations import _download_blob_data
 
-from shared_models import BlobDownloadRequest, BlobDownloadResponse, AudioTranscriptionRequest, AudioTranscriptionResponse
+from shared_models import BlobDownloadRequest, BlobDownloadResponse, AudioTranscriptionRequest, AudioTranscriptionResponse, BlobTranscriptionRequest, BlobTranscriptionResponse
 
 # Import config to get the agent address
 try:
@@ -59,6 +59,74 @@ async def handle_blob_download_request(ctx: Context, sender: str, msg: BlobDownl
         response = BlobDownloadResponse(
             blob_data_base64="",
             mime_type="",
+            blob_id=msg.blob_id,
+            request_id=msg.request_id,
+            success=False,
+            error_message=str(exc)
+        )
+        
+        await ctx.send(sender, response)
+
+
+@agent_comm_proto.on_message(model=BlobTranscriptionRequest)
+async def handle_blob_transcription_request(ctx: Context, sender: str, msg: BlobTranscriptionRequest):
+    """Handle blob transcription requests from other agents."""
+    ctx.logger.info(f"Received blob transcription request from {sender} for blob {msg.blob_id}")
+    
+    try:
+        # Download the blob data
+        blob_data, mime_type = _download_blob_data(msg.blob_id)
+        
+        # Check if it's an audio file
+        if not mime_type.startswith('audio/'):
+            response = BlobTranscriptionResponse(
+                transcript="",
+                blob_id=msg.blob_id,
+                request_id=msg.request_id,
+                success=False,
+                error_message=f"Blob is not an audio file (mime_type: {mime_type})"
+            )
+            await ctx.send(sender, response)
+            return
+        
+        # Request transcription from voice-to-text agent
+        transcription_result = await request_audio_transcription(
+            ctx, blob_data, mime_type, msg.blob_id, f"Transcription request for blob {msg.blob_id}"
+        )
+        
+        # Extract transcript from the result
+        if "Transcription Complete!" in transcription_result:
+            # Extract the transcript from the formatted result
+            lines = transcription_result.split('\n')
+            transcript = ""
+            for line in lines:
+                if line.strip() and not line.startswith('📝') and not line.startswith('**'):
+                    transcript = line.strip()
+                    break
+            
+            response = BlobTranscriptionResponse(
+                transcript=transcript,
+                blob_id=msg.blob_id,
+                request_id=msg.request_id,
+                success=True
+            )
+        else:
+            response = BlobTranscriptionResponse(
+                transcript="",
+                blob_id=msg.blob_id,
+                request_id=msg.request_id,
+                success=False,
+                error_message=transcription_result
+            )
+        
+        await ctx.send(sender, response)
+        ctx.logger.info(f"Blob transcription completed for {msg.blob_id}")
+        
+    except Exception as exc:
+        ctx.logger.error(f"Blob transcription failed for {msg.blob_id}: {exc}")
+        
+        response = BlobTranscriptionResponse(
+            transcript="",
             blob_id=msg.blob_id,
             request_id=msg.request_id,
             success=False,
