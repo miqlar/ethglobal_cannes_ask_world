@@ -27,7 +27,6 @@ export default function AudioRecorder() {
     const [submittingQuestion, setSubmittingQuestion] = useState(false);
     const [questionStatus, setQuestionStatus] = useState<string>('');
     const [bountyPrice, setBountyPrice] = useState<string>('');
-    const [deadline, setDeadline] = useState<string>('');
     const [maxSubmissions, setMaxSubmissions] = useState<string>('');
     const [currentCardIndex, setCurrentCardIndex] = useState(0);
     const [startX, setStartX] = useState(0);
@@ -178,14 +177,7 @@ export default function AudioRecorder() {
             }
         }
 
-        // Validate deadline if provided
-        if (deadline.trim()) {
-            const deadlineDate = new Date(deadline);
-            if (isNaN(deadlineDate.getTime()) || deadlineDate <= new Date()) {
-                setQuestionStatus('Please enter a valid future deadline.');
-                return;
-            }
-        }
+
 
         // Validate max submissions if provided
         if (maxSubmissions.trim()) {
@@ -215,7 +207,6 @@ export default function AudioRecorder() {
             setShowToast(true);
             setQuestion('');
             setBountyPrice('');
-            setDeadline('');
             setMaxSubmissions('');
 
             // Return to main page after a delay
@@ -347,9 +338,7 @@ export default function AudioRecorder() {
             <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 via-purple-500 to-indigo-500 py-8 px-2">
                 <div className="w-full max-w-md bg-white/90 rounded-3xl shadow-2xl p-8 flex flex-col items-center animate-fade-in">
                     <div className="flex flex-col items-center mb-6">
-                        <Image src="/askworld-logo.png" alt="Ask World Logo" width={144} height={144} className="mb-2 animate-pop" />
-                        <h1 className="text-3xl font-extrabold text-gray-900 mb-1 tracking-tight">Mini World</h1>
-                        <p className="text-sm text-gray-500 mb-2">Ask a question to the community</p>
+                        <Image src="/askworld-logo.png" alt="Ask World Logo" width={180} height={180} className="mb-2 animate-pop" />
                     </div>
 
                     <div className="w-full mb-6">
@@ -366,7 +355,7 @@ export default function AudioRecorder() {
                         <div className="flex gap-4 mb-4">
                             <div className="flex-1">
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Bounty Price (ETH) (Optional)
+                                    Total Award (ETH)
                                 </label>
                                 <input
                                     type="number"
@@ -381,30 +370,27 @@ export default function AudioRecorder() {
                             </div>
                             <div className="flex-1">
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Deadline (Optional)
+                                    Max Submissions
                                 </label>
                                 <input
-                                    type="datetime-local"
-                                    value={deadline}
-                                    onChange={(e) => setDeadline(e.target.value)}
-                                    className="w-full p-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-700"
+                                    type="number"
+                                    min="1"
+                                    value={maxSubmissions}
+                                    onChange={(e) => setMaxSubmissions(e.target.value)}
+                                    placeholder="5"
+                                    className="w-full p-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-700 placeholder-gray-400"
                                     disabled={submittingQuestion}
                                 />
                             </div>
                         </div>
-                        <div className="w-full">
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Number of Submissions Allowed (Optional)
-                            </label>
-                            <input
-                                type="number"
-                                min="1"
-                                value={maxSubmissions}
-                                onChange={(e) => setMaxSubmissions(e.target.value)}
-                                placeholder="5"
-                                className="w-full p-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-700 placeholder-gray-400"
-                                disabled={submittingQuestion}
-                            />
+                        <div className="w-full flex gap-4 items-end justify-center">
+                            <button
+                                onClick={handleQuestionSubmit}
+                                disabled={!question.trim() || submittingQuestion}
+                                className="px-24 py-6 rounded-full font-semibold shadow-md bg-gradient-to-r from-green-500 to-blue-500 text-white hover:from-green-600 hover:to-blue-600 focus:outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50"
+                            >
+                                {submittingQuestion ? 'Submitting...' : 'Submit'}
+                            </button>
                         </div>
                     </div>
 
@@ -418,16 +404,13 @@ export default function AudioRecorder() {
                         <button
                             onClick={() => setShowAskPage(false)}
                             disabled={submittingQuestion}
-                            className="flex-1 transition-all px-6 py-3 rounded-full font-semibold shadow-md bg-gradient-to-r from-gray-400 to-gray-500 text-white hover:from-gray-500 hover:to-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-400 disabled:opacity-50"
+                            className="w-[10%] min-w-[2.5rem] aspect-square flex items-center justify-center rounded-full shadow-md bg-white text-purple-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                            aria-label="Home"
                         >
-                            Back
-                        </button>
-                        <button
-                            onClick={handleQuestionSubmit}
-                            disabled={!question.trim() || submittingQuestion}
-                            className="flex-1 transition-all px-6 py-3 rounded-full font-semibold shadow-md bg-gradient-to-r from-green-500 to-blue-500 text-white hover:from-green-600 hover:to-blue-600 focus:outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50"
-                        >
-                            {submittingQuestion ? 'Submitting...' : 'Submit Question'}
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
+                                <path d="M3 12l9-9 9 9" />
+                                <path d="M4 10v10a1 1 0 001 1h5m4 0h5a1 1 0 001-1V10" />
+                            </svg>
                         </button>
                     </div>
                 </div>
@@ -440,7 +423,7 @@ export default function AudioRecorder() {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 via-purple-500 to-indigo-500 py-8 px-2">
                 <div className="w-full max-w-md bg-white/90 rounded-3xl shadow-2xl p-8 flex flex-col items-center animate-fade-in">
-                    <Image src="/askworld-logo.png" alt="Ask World Logo" width={144} height={144} className="mb-6 animate-pop" />
+                    <Image src="/askworld-logo.png" alt="Ask World Logo" width={288} height={288} className="mb-6 animate-pop" />
                     <div className="flex gap-8 w-full justify-center">
                         <button
                             className="transition-all flex items-center gap-2 px-12 py-4 rounded-full font-bold shadow-lg bg-gradient-to-r from-green-400 to-blue-500 text-white hover:from-green-500 hover:to-blue-600 focus:outline-none focus:ring-2 focus:ring-green-400 text-xl transform hover:scale-105 active:scale-95"
