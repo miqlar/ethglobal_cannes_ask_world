@@ -12,10 +12,9 @@ contract FeedbackSystem is Ownable, ReentrancyGuard {
 
     // Enums
     enum FeedbackStatus {
-        PENDING,    // 0 - Waiting for AI validation
-        VALID,      // 1 - AI validated as good feedback
-        NOT_VALID,  // 2 - AI rejected the feedback
-        PAID        // 3 - Feedback has been paid out
+        PENDING,         // 0 - Waiting for AI validation
+        NOT_VALID,       // 1 - AI rejected the feedback
+        VALID_AND_PAYED  // 2 - AI validated and paid out
     }
 
     enum RequestStatus {
@@ -213,28 +212,39 @@ contract FeedbackSystem is Ownable, ReentrancyGuard {
      * @param feedbackId ID of the feedback to validate
      * @param isValid Whether the feedback is valid
      */
-    function validateFeedback(
+    function validateAndPayFeedback(
         uint256 feedbackId,
         bool isValid
-    ) external onlyAIValidator feedbackExists(feedbackId) {
+    ) external onlyAIValidator feedbackExists(feedbackId) nonReentrant {
         Feedback storage feedback = feedbacks[feedbackId];
-        require(feedback.status == FeedbackStatus.PENDING, "Feedback already validated");
-
-        FeedbackStatus status = isValid ? FeedbackStatus.VALID : FeedbackStatus.NOT_VALID;
-        feedback.status = status;
-        feedback.validatedAt = block.timestamp;
+        require(feedback.status == FeedbackStatus.PENDING, "Feedback already processed");
 
         if (isValid) {
+            feedback.status = FeedbackStatus.VALID_AND_PAYED;
+            feedback.validatedAt = block.timestamp;
+            
             feedbackRequests[feedback.requestId].validFeedbacksCount++;
+            
+            // Pay the bounty immediately
+            uint256 bountyPerFeedback = feedbackRequests[feedback.requestId].totalBounty / 
+                                       feedbackRequests[feedback.requestId].feedbacksWanted;
+            
+            (bool success, ) = payable(feedback.provider).call{value: bountyPerFeedback}("");
+            require(success, "Transfer failed");
+
+            emit BountyPaid(feedbackId, feedback.provider, bountyPerFeedback);
             
             // Check if request should be closed
             if (feedbackRequests[feedback.requestId].validFeedbacksCount >= 
                 feedbackRequests[feedback.requestId].feedbacksWanted) {
                 _closeRequest(feedback.requestId);
             }
+        } else {
+            feedback.status = FeedbackStatus.NOT_VALID;
+            feedback.validatedAt = block.timestamp;
         }
 
-        emit FeedbackValidated(feedbackId, feedback.requestId, status, msg.sender);
+        emit FeedbackValidated(feedbackId, feedback.requestId, feedback.status, msg.sender);
     }
 
     /**
@@ -255,30 +265,7 @@ contract FeedbackSystem is Ownable, ReentrancyGuard {
         _closeRequest(requestId);
     }
 
-    /**
-     * @dev Claim bounty for valid feedback
-     * @param feedbackId ID of the feedback to claim for
-     */
-    function claimBounty(uint256 feedbackId) 
-        external 
-        nonReentrant 
-        feedbackExists(feedbackId) 
-    {
-        Feedback storage feedback = feedbacks[feedbackId];
-        require(feedback.provider == msg.sender, "Not the feedback provider");
-        require(feedback.status == FeedbackStatus.VALID, "Feedback not valid");
-        require(feedback.status != FeedbackStatus.PAID, "Already claimed");
 
-        feedback.status = FeedbackStatus.PAID;
-
-        uint256 bountyPerFeedback = feedbackRequests[feedback.requestId].totalBounty / 
-                                   feedbackRequests[feedback.requestId].feedbacksWanted;
-        
-        (bool success, ) = payable(msg.sender).call{value: bountyPerFeedback}("");
-        require(success, "Transfer failed");
-
-        emit BountyPaid(feedbackId, msg.sender, bountyPerFeedback);
-    }
 
     /**
      * @dev Get all feedbacks for a request
@@ -399,5 +386,35 @@ contract FeedbackSystem is Ownable, ReentrancyGuard {
             request.feedbacksWanted,
             request.validFeedbacksCount >= request.feedbacksWanted
         );
+    }
+
+    /**
+     * @dev Get all non-fulfilled feedback requests (requests that need more valid feedbacks)
+     * @return Array of request IDs that are still open and need more valid feedbacks
+     */
+    function getNonFulfilledRequests() 
+        external 
+        view 
+        returns (uint256[] memory) 
+    {
+        uint256[] memory tempRequests = new uint256[](_requestIds);
+        uint256 count = 0;
+        
+        for (uint256 i = 1; i <= _requestIds; i++) {
+            if (feedbackRequests[i].exists && 
+                feedbackRequests[i].status == RequestStatus.OPEN &&
+                feedbackRequests[i].validFeedbacksCount < feedbackRequests[i].feedbacksWanted) {
+                tempRequests[count] = i;
+                count++;
+            }
+        }
+        
+        // Create properly sized array
+        uint256[] memory result = new uint256[](count);
+        for (uint256 i = 0; i < count; i++) {
+            result[i] = tempRequests[i];
+        }
+        
+        return result;
     }
 } 

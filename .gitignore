@@ -203,3 +203,6 @@ logs/
 # *.tiff
 
 private_keys.json
+cache/
+smart_contracts/cache/*
+smart_contracts/cache

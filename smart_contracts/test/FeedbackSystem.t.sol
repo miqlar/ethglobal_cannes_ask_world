@@ -127,7 +127,7 @@ contract FeedbackSystemTest is Test {
         feedbackSystem.submitFeedback(1, "QmHash2");
     }
 
-    function test_ValidateFeedback_Valid() public {
+    function test_ValidateAndPayFeedback_Valid() public {
         // Create request and submit feedback
         vm.prank(requester);
         feedbackSystem.createFeedbackRequest{value: 0.1 ether}("Instructions", 2);
@@ -135,18 +135,21 @@ contract FeedbackSystemTest is Test {
         vm.prank(provider1);
         feedbackSystem.submitFeedback(1, "QmHash1");
 
-        // Validate as valid
+        uint256 initialBalance = provider1.balance;
+
+        // Validate as valid and pay
         vm.prank(aiValidator);
         vm.expectEmit(true, true, false, true);
-        emit FeedbackValidated(1, 1, FeedbackSystem.FeedbackStatus.VALID, aiValidator);
+        emit FeedbackValidated(1, 1, FeedbackSystem.FeedbackStatus.VALID_AND_PAYED, aiValidator);
         
-        feedbackSystem.validateFeedback(1, true);
+        feedbackSystem.validateAndPayFeedback(1, true);
 
         FeedbackSystem.Feedback memory feedback = feedbackSystem.getFeedback(1);
-        assertEq(uint256(feedback.status), 1); // VALID
+        assertEq(uint256(feedback.status), 2); // VALID_AND_PAYED
+        assertEq(provider1.balance, initialBalance + 0.05 ether); // Should be paid
     }
 
-    function test_ValidateFeedback_Invalid() public {
+    function test_ValidateAndPayFeedback_Invalid() public {
         // Create request and submit feedback
         vm.prank(requester);
         feedbackSystem.createFeedbackRequest{value: 0.1 ether}("Instructions", 2);
@@ -159,13 +162,13 @@ contract FeedbackSystemTest is Test {
         vm.expectEmit(true, true, false, true);
         emit FeedbackValidated(1, 1, FeedbackSystem.FeedbackStatus.NOT_VALID, aiValidator);
         
-        feedbackSystem.validateFeedback(1, false);
+        feedbackSystem.validateAndPayFeedback(1, false);
 
         FeedbackSystem.Feedback memory feedback = feedbackSystem.getFeedback(1);
-        assertEq(uint256(feedback.status), 2); // NOT_VALID
+        assertEq(uint256(feedback.status), 1); // NOT_VALID
     }
 
-    function test_ValidateFeedback_Unauthorized() public {
+    function test_ValidateAndPayFeedback_Unauthorized() public {
         // Create request and submit feedback
         vm.prank(requester);
         feedbackSystem.createFeedbackRequest{value: 0.1 ether}("Instructions", 2);
@@ -176,7 +179,7 @@ contract FeedbackSystemTest is Test {
         // Try to validate without authorization
         vm.prank(provider1);
         vm.expectRevert("Not authorized");
-        feedbackSystem.validateFeedback(1, true);
+        feedbackSystem.validateAndPayFeedback(1, true);
     }
 
     function test_RequestClosure_Automatic() public {
@@ -190,11 +193,11 @@ contract FeedbackSystemTest is Test {
         vm.prank(provider2);
         feedbackSystem.submitFeedback(1, "QmHash2");
 
-        // Validate as valid
+        // Validate as valid and pay
         vm.prank(aiValidator);
-        feedbackSystem.validateFeedback(1, true);
+        feedbackSystem.validateAndPayFeedback(1, true);
         vm.prank(aiValidator);
-        feedbackSystem.validateFeedback(2, true);
+        feedbackSystem.validateAndPayFeedback(2, true);
 
         // Check if request is closed
         FeedbackSystem.FeedbackRequest memory request = feedbackSystem.getFeedbackRequest(1);
@@ -217,44 +220,7 @@ contract FeedbackSystemTest is Test {
         assertEq(uint256(request.status), 1); // CLOSED
     }
 
-    function test_ClaimBounty() public {
-        // Create request
-        vm.prank(requester);
-        feedbackSystem.createFeedbackRequest{value: 0.1 ether}("Instructions", 2);
 
-        // Submit and validate feedback
-        vm.prank(provider1);
-        feedbackSystem.submitFeedback(1, "QmHash1");
-        vm.prank(aiValidator);
-        feedbackSystem.validateFeedback(1, true);
-
-        // Claim bounty
-        uint256 initialBalance = provider1.balance;
-        vm.prank(provider1);
-        vm.expectEmit(true, true, false, true);
-        emit BountyPaid(1, provider1, 0.05 ether);
-        
-        feedbackSystem.claimBounty(1);
-
-        assertEq(provider1.balance, initialBalance + 0.05 ether);
-    }
-
-    function test_ClaimBounty_InvalidFeedback() public {
-        // Create request
-        vm.prank(requester);
-        feedbackSystem.createFeedbackRequest{value: 0.1 ether}("Instructions", 2);
-
-        // Submit and validate as invalid
-        vm.prank(provider1);
-        feedbackSystem.submitFeedback(1, "QmHash1");
-        vm.prank(aiValidator);
-        feedbackSystem.validateFeedback(1, false);
-
-        // Try to claim bounty
-        vm.prank(provider1);
-        vm.expectRevert("Feedback not valid");
-        feedbackSystem.claimBounty(1);
-    }
 
     function test_GetRequestStats() public {
         // Create request
@@ -267,9 +233,9 @@ contract FeedbackSystemTest is Test {
         vm.prank(provider2);
         feedbackSystem.submitFeedback(1, "QmHash2");
 
-        // Validate one as valid
+        // Validate one as valid and pay
         vm.prank(aiValidator);
-        feedbackSystem.validateFeedback(1, true);
+        feedbackSystem.validateAndPayFeedback(1, true);
 
         // Get stats
         (uint256 validCount, uint256 totalCount, uint256 wantedCount, bool isComplete) = 
@@ -324,5 +290,30 @@ contract FeedbackSystemTest is Test {
         assertEq(feedbacks2.length, 1);
         assertEq(feedbacks1[0], 1);
         assertEq(feedbacks2[0], 2);
+    }
+
+    function test_GetNonFulfilledRequests() public {
+        // Create requests
+        vm.prank(requester);
+        feedbackSystem.createFeedbackRequest{value: 0.1 ether}("Instructions1", 2);
+        vm.prank(requester);
+        feedbackSystem.createFeedbackRequest{value: 0.1 ether}("Instructions2", 1);
+
+        // Submit feedbacks
+        vm.prank(provider1);
+        feedbackSystem.submitFeedback(1, "QmHash1");
+        vm.prank(provider2);
+        feedbackSystem.submitFeedback(2, "QmHash2");
+
+        // Validate one feedback for request 2 (fulfilling it)
+        vm.prank(aiValidator);
+        feedbackSystem.validateAndPayFeedback(2, true);
+
+        // Get non-fulfilled requests
+        uint256[] memory nonFulfilled = feedbackSystem.getNonFulfilledRequests();
+        
+        // Should only have request 1 (request 2 is fulfilled)
+        assertEq(nonFulfilled.length, 1);
+        assertEq(nonFulfilled[0], 1);
     }
 } 
