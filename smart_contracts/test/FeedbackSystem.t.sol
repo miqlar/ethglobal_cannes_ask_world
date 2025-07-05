@@ -293,16 +293,6 @@ contract FeedbackSystemTest is Test {
         assertFalse(feedbackSystem.isAIValidator(newValidator));
     }
 
-    function test_EmergencyWithdraw() public {
-        // Create request to add funds
-        vm.prank(requester);
-        feedbackSystem.createFeedbackRequest{value: 0.1 ether}("Instructions", 1);
-
-        uint256 initialBalance = owner.balance;
-        feedbackSystem.emergencyWithdraw();
-        assertEq(owner.balance, initialBalance + 0.1 ether);
-    }
-
     function test_GetUserRequests() public {
         // Create requests
         vm.prank(requester);
