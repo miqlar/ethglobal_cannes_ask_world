@@ -93,7 +93,7 @@ async def handle_message(ctx: Context, sender: str, msg: ChatMessage):
     intent = intent_result.get('intent', 'unknown')
     
     # If confidence is low or intent is unknown, ask for clarification
-    if confidence < 0.7 or intent == 'unknown':
+    if confidence < 0.6 or intent == 'unknown':
         if user_message:  # Only ask for clarification if there's a message
             clarification = generate_clarification_message(user_message)
             await ctx.send(sender, _chat(clarification))

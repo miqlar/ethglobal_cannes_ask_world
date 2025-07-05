@@ -48,7 +48,7 @@ Return a JSON object with:
     }
 }
 
-Be more strict with confidence scores. Only give high confidence (>0.8) when the intent is very clear.
+Be reasonable with confidence scores. Give high confidence (>0.8) when the intent is clear, and medium confidence (0.6-0.8) when the intent is likely but not certain. For download operations with blob IDs, give high confidence.
 """
 
 # System prompt for generating clarification messages
@@ -153,6 +153,34 @@ def detect_intent(message: str, has_attachment: bool = False) -> Dict[str, Any]:
             "extracted_data": {
                 "blob_id": None,
                 "url": message.strip(),
+                "description": None
+            }
+        }
+    
+    # Check for blob IDs (alphanumeric strings that look like blob IDs)
+    import re
+    blob_id_pattern = r'^[A-Za-z0-9_-]{20,}$'
+    if re.match(blob_id_pattern, message.strip()):
+        return {
+            "intent": "download_blob",
+            "confidence": 0.95,
+            "extracted_data": {
+                "blob_id": message.strip(),
+                "url": None,
+                "description": None
+            }
+        }
+    
+    # Check for "download" followed by blob ID
+    download_pattern = r'^download\s+([A-Za-z0-9_-]{20,})$'
+    download_match = re.match(download_pattern, message.strip(), re.IGNORECASE)
+    if download_match:
+        return {
+            "intent": "download_blob",
+            "confidence": 0.98,
+            "extracted_data": {
+                "blob_id": download_match.group(1),
+                "url": None,
                 "description": None
             }
         }

@@ -13,8 +13,8 @@ SEED_PHRASE = "put_your_seed_phrase_here"
 agent = Agent(
     name="voice-to-text",
     port=8002,  # Using 8002 to avoid conflicts with other agents
-    endpoint=["http://localhost:8002/submit"],
-    mailbox=True
+    #endpoint=["http://localhost:8002/submit"],
+    mailbox=False
 )
 
 # Include chat protocol and publish manifest so ASI:One / Agentverse can find it

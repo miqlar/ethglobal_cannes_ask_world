@@ -9,11 +9,14 @@ from walrus_operations import _download_blob_data
 
 from shared_models import BlobDownloadRequest, BlobDownloadResponse, AudioTranscriptionRequest, AudioTranscriptionResponse
 
-agent_comm_proto = Protocol()
+# Import config to get the agent address
+try:
+    from config import VOICE_TO_TEXT_AGENT_ADDRESS
+except ImportError:
+    # Fallback to environment variable if config import fails
+    VOICE_TO_TEXT_AGENT_ADDRESS = os.getenv("VOICE_TO_TEXT_AGENT_ADDRESS", "http://localhost:8002/transcribe")
 
-# Voice-to-text agent configuration
-# Can be either localhost (for REST) or remote agent address (for agent-to-agent)
-VOICE_TO_TEXT_AGENT_ADDRESS = os.getenv("VOICE_TO_TEXT_AGENT_ADDRESS", "http://localhost:8002/transcribe")
+agent_comm_proto = Protocol()
 
 # Debug logging
 print(f"🔗 Voice-to-text agent configured: {VOICE_TO_TEXT_AGENT_ADDRESS}")
