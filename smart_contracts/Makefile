@@ -22,15 +22,19 @@ test-match:
 
 # Deploy to local network
 deploy-local:
-	forge script script/Deploy.s.sol --rpc-url http://localhost:8545 --broadcast
+	./deploy.sh local
 
 # Deploy to Sepolia
 deploy-sepolia:
-	forge script script/Deploy.s.sol --rpc-url $(SEPOLIA_RPC_URL) --broadcast --verify
+	./deploy.sh sepolia $(PRIVATE_KEY)
+
+# Deploy to Base Sepolia
+deploy-base-sepolia:
+	./deploy.sh base-sepolia $(PRIVATE_KEY)
 
 # Deploy to Worldcoin Sepolia
 deploy-worldcoin:
-	forge script script/Deploy.s.sol --rpc-url $(WORLDCOIN_SEPOLIA_RPC_URL) --broadcast --verify
+	./deploy.sh worldcoin-sepolia $(PRIVATE_KEY)
 
 # Interact with deployed contract
 interact:
@@ -82,8 +86,9 @@ help:
 	@echo "  test-vv        - Run tests with very verbose output"
 	@echo "  test-match     - Run specific test (TEST=testName)"
 	@echo "  deploy-local   - Deploy to local network"
-	@echo "  deploy-sepolia - Deploy to Sepolia"
-	@echo "  deploy-worldcoin - Deploy to Worldcoin Sepolia"
+	@echo "  deploy-sepolia - Deploy to Sepolia (requires PRIVATE_KEY)"
+	@echo "  deploy-base-sepolia - Deploy to Base Sepolia (requires PRIVATE_KEY)"
+	@echo "  deploy-worldcoin - Deploy to Worldcoin Sepolia (requires PRIVATE_KEY)"
 	@echo "  interact       - Interact with deployed contract"
 	@echo "  clean          - Clean build artifacts"
 	@echo "  install        - Install dependencies"

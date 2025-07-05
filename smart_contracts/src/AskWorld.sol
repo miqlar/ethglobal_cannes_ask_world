@@ -6,90 +6,91 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
  * @title AskWorld
- * @dev A smart contract for managing feedback requests with IPFS audio files and AI validation
+ * @dev A smart contract for managing questions with audio answers and AI validation
  */
 contract AskWorld is Ownable, ReentrancyGuard {
 
     // Enums
-    enum FeedbackStatus {
-        PENDING,         // 0 - Waiting for AI validation
-        NOT_VALID,       // 1 - AI rejected the feedback
-        VALID_AND_PAYED  // 2 - AI validated and paid out
+    enum AnswerStatus {
+        PENDING,        // 0 - Waiting for AI validation
+        REJECTED,       // 1 - AI rejected the answer
+        APPROVED        // 2 - AI approved and paid out
     }
 
-    enum RequestStatus {
-        OPEN,       // 0 - Accepting feedback submissions
-        CLOSED,     // 1 - Enough valid feedbacks received
-        CANCELLED   // 2 - Request was cancelled
+    enum QuestionStatus {
+        OPEN,       // 0 - Accepting answers
+        CLOSED,     // 1 - Enough valid answers received
+        CANCELLED   // 2 - Question was cancelled
     }
 
     // Structs
-    struct FeedbackRequest {
+    struct Question {
         uint256 id;
-        address requester;
-        string instructions;
-        uint256 feedbacksWanted;
-        uint256 totalBounty;
-        uint256 validFeedbacksCount;
-        uint256 totalFeedbacksCount;
-        RequestStatus status;
+        address asker;
+        string prompt;
+        uint256 answersNeeded;
+        uint256 bounty;
+        uint256 validAnswersCount;
+        uint256 totalAnswersCount;
+        QuestionStatus status;
         uint256 createdAt;
         uint256 closedAt;
         bool exists;
     }
 
-    struct Feedback {
+    struct Answer {
         uint256 id;
-        uint256 requestId;
+        uint256 questionId;
         address provider;
-        string ipfsAudioHash;
-        FeedbackStatus status;
+        string audioHash;
+        AnswerStatus status;
         uint256 submittedAt;
         uint256 validatedAt;
         bool exists;
     }
 
     // State variables
-    uint256 private _requestIds = 0;
-    uint256 private _feedbackIds = 0;
+    uint256 private _questionIds = 0;
+    uint256 private _answerIds = 0;
     
-    mapping(uint256 => FeedbackRequest) public feedbackRequests;
-    mapping(uint256 => Feedback) public feedbacks;
-    mapping(uint256 => uint256[]) public requestFeedbacks; // requestId => feedbackIds[]
-    mapping(address => uint256[]) public userRequests; // user => requestIds[]
-    mapping(address => uint256[]) public userFeedbacks; // user => feedbackIds[]
+    mapping(uint256 => Question) public questions;
+    mapping(uint256 => Answer) public answers;
+    mapping(uint256 => uint256[]) public questionAnswers; // questionId => answerIds[]
+    mapping(address => uint256[]) public userQuestions; // user => questionIds[]
+    mapping(address => uint256[]) public userAnswers; // user => answerIds[]
+    mapping(address => bool) public aiValidators;
 
     // Events
-    event FeedbackRequestCreated(
-        uint256 indexed requestId,
-        address indexed requester,
-        string instructions,
-        uint256 feedbacksWanted,
-        uint256 totalBounty
+    event QuestionAsked(
+        uint256 indexed questionId,
+        address indexed asker,
+        string prompt,
+        uint256 answersNeeded,
+        uint256 bounty
     );
 
-    event FeedbackSubmitted(
-        uint256 indexed feedbackId,
-        uint256 indexed requestId,
+    event AnswerSubmitted(
+        uint256 indexed answerId,
+        uint256 indexed questionId,
         address indexed provider,
-        string ipfsAudioHash
+        string audioHash
     );
 
-    event FeedbackValidated(
-        uint256 indexed feedbackId,
-        uint256 indexed requestId,
-        FeedbackStatus status,
+    event AnswerValidated(
+        uint256 indexed answerId,
+        uint256 indexed questionId,
+        AnswerStatus status,
         address validator
     );
 
-    event RequestClosed(
-        uint256 indexed requestId,
-        uint256 validFeedbacksCount,
+    event QuestionClosed(
+        uint256 indexed questionId,
+        uint256 validAnswersCount,
         uint256 totalBounty
     );
 
     event BountyPaid(
-        uint256 indexed feedbackId,
+        uint256 indexed answerId,
         address indexed provider,
         uint256 amount
     );
@@ -100,311 +101,273 @@ contract AskWorld is Ownable, ReentrancyGuard {
         _;
     }
 
-    modifier requestExists(uint256 requestId) {
-        require(feedbackRequests[requestId].exists, "Request does not exist");
+    modifier questionExists(uint256 questionId) {
+        require(questions[questionId].exists, "Question does not exist");
         _;
     }
 
-    modifier feedbackExists(uint256 feedbackId) {
-        require(feedbacks[feedbackId].exists, "Feedback does not exist");
+    modifier answerExists(uint256 answerId) {
+        require(answers[answerId].exists, "Answer does not exist");
         _;
     }
 
-    modifier requestOpen(uint256 requestId) {
-        require(feedbackRequests[requestId].status == RequestStatus.OPEN, "Request not open");
+    modifier questionOpen(uint256 questionId) {
+        require(questions[questionId].status == QuestionStatus.OPEN, "Question not open");
         _;
     }
-
-    // AI validators mapping
-    mapping(address => bool) public aiValidators;
 
     constructor() Ownable(msg.sender) {
         aiValidators[msg.sender] = true; // Owner is default AI validator
     }
 
     /**
-     * @dev Create a new feedback request
-     * @param instructions Instructions for the feedback
-     * @param feedbacksWanted Number of valid feedbacks needed
+     * @dev Ask a new question
+     * @param prompt The question prompt
+     * @param answersNeeded Number of valid answers needed
      */
-    function createFeedbackRequest(
-        string memory instructions,
-        uint256 feedbacksWanted
+    function askQuestion(
+        string memory prompt,
+        uint256 answersNeeded
     ) external payable {
         require(msg.value > 0, "Bounty must be greater than 0");
-        require(feedbacksWanted > 0, "Must want at least 1 feedback");
-        require(bytes(instructions).length > 0, "Instructions cannot be empty");
+        require(answersNeeded > 0, "Must need at least 1 answer");
+        require(bytes(prompt).length > 0, "Prompt cannot be empty");
 
-        _requestIds++;
-        uint256 requestId = _requestIds;
+        _questionIds++;
+        uint256 questionId = _questionIds;
 
-        FeedbackRequest memory newRequest = FeedbackRequest({
-            id: requestId,
-            requester: msg.sender,
-            instructions: instructions,
-            feedbacksWanted: feedbacksWanted,
-            totalBounty: msg.value,
-            validFeedbacksCount: 0,
-            totalFeedbacksCount: 0,
-            status: RequestStatus.OPEN,
+        Question memory newQuestion = Question({
+            id: questionId,
+            asker: msg.sender,
+            prompt: prompt,
+            answersNeeded: answersNeeded,
+            bounty: msg.value,
+            validAnswersCount: 0,
+            totalAnswersCount: 0,
+            status: QuestionStatus.OPEN,
             createdAt: block.timestamp,
             closedAt: 0,
             exists: true
         });
 
-        feedbackRequests[requestId] = newRequest;
-        userRequests[msg.sender].push(requestId);
+        questions[questionId] = newQuestion;
+        userQuestions[msg.sender].push(questionId);
 
-        emit FeedbackRequestCreated(
-            requestId,
+        emit QuestionAsked(
+            questionId,
             msg.sender,
-            instructions,
-            feedbacksWanted,
+            prompt,
+            answersNeeded,
             msg.value
         );
     }
 
     /**
-     * @dev Submit feedback for a request
-     * @param requestId ID of the feedback request
-     * @param ipfsAudioHash IPFS hash of the audio file
+     * @dev Submit an answer to a question
+     * @param questionId ID of the question
+     * @param audioHash IPFS hash of the audio file
      */
-    function submitFeedback(
-        uint256 requestId,
-        string memory ipfsAudioHash
-    ) external requestExists(requestId) requestOpen(requestId) {
-        require(bytes(ipfsAudioHash).length > 0, "IPFS hash cannot be empty");
+    function submitAnswer(
+        uint256 questionId,
+        string memory audioHash
+    ) external questionExists(questionId) questionOpen(questionId) {
+        require(bytes(audioHash).length > 0, "Audio hash cannot be empty");
         
-        // Check if user already submitted feedback for this request
-        uint256[] memory userFeedbackIds = userFeedbacks[msg.sender];
-        for (uint256 i = 0; i < userFeedbackIds.length; i++) {
+        // Check if user already submitted answer for this question
+        uint256[] memory userAnswerIds = userAnswers[msg.sender];
+        for (uint256 i = 0; i < userAnswerIds.length; i++) {
             require(
-                feedbacks[userFeedbackIds[i]].requestId != requestId,
-                "Already submitted feedback for this request"
+                answers[userAnswerIds[i]].questionId != questionId,
+                "Already submitted answer for this question"
             );
         }
 
-        _feedbackIds++;
-        uint256 feedbackId = _feedbackIds;
+        _answerIds++;
+        uint256 answerId = _answerIds;
 
-        Feedback memory newFeedback = Feedback({
-            id: feedbackId,
-            requestId: requestId,
+        Answer memory newAnswer = Answer({
+            id: answerId,
+            questionId: questionId,
             provider: msg.sender,
-            ipfsAudioHash: ipfsAudioHash,
-            status: FeedbackStatus.PENDING,
+            audioHash: audioHash,
+            status: AnswerStatus.PENDING,
             submittedAt: block.timestamp,
             validatedAt: 0,
             exists: true
         });
 
-        feedbacks[feedbackId] = newFeedback;
-        requestFeedbacks[requestId].push(feedbackId);
-        userFeedbacks[msg.sender].push(feedbackId);
+        answers[answerId] = newAnswer;
+        questionAnswers[questionId].push(answerId);
+        userAnswers[msg.sender].push(answerId);
         
-        feedbackRequests[requestId].totalFeedbacksCount++;
+        questions[questionId].totalAnswersCount++;
 
-        emit FeedbackSubmitted(feedbackId, requestId, msg.sender, ipfsAudioHash);
+        emit AnswerSubmitted(answerId, questionId, msg.sender, audioHash);
     }
 
     /**
-     * @dev Validate feedback (only AI validators)
-     * @param feedbackId ID of the feedback to validate
-     * @param isValid Whether the feedback is valid
+     * @dev Validate an answer (only AI validators)
+     * @param answerId ID of the answer to validate
+     * @param isValid Whether the answer is valid
      */
-    function validateAndPayFeedback(
-        uint256 feedbackId,
+    function validateAnswer(
+        uint256 answerId,
         bool isValid
-    ) external onlyAIValidator feedbackExists(feedbackId) nonReentrant {
-        Feedback storage feedback = feedbacks[feedbackId];
-        require(feedback.status == FeedbackStatus.PENDING, "Feedback already processed");
+    ) external onlyAIValidator answerExists(answerId) nonReentrant {
+        Answer storage answer = answers[answerId];
+        require(answer.status == AnswerStatus.PENDING, "Answer already processed");
 
         if (isValid) {
-            feedback.status = FeedbackStatus.VALID_AND_PAYED;
-            feedback.validatedAt = block.timestamp;
+            answer.status = AnswerStatus.APPROVED;
+            answer.validatedAt = block.timestamp;
             
-            feedbackRequests[feedback.requestId].validFeedbacksCount++;
+            questions[answer.questionId].validAnswersCount++;
             
             // Pay the bounty immediately
-            uint256 bountyPerFeedback = feedbackRequests[feedback.requestId].totalBounty / 
-                                       feedbackRequests[feedback.requestId].feedbacksWanted;
+            uint256 bountyPerAnswer = questions[answer.questionId].bounty / 
+                                     questions[answer.questionId].answersNeeded;
             
-            (bool success, ) = payable(feedback.provider).call{value: bountyPerFeedback}("");
+            (bool success, ) = payable(answer.provider).call{value: bountyPerAnswer}("");
             require(success, "Transfer failed");
 
-            emit BountyPaid(feedbackId, feedback.provider, bountyPerFeedback);
+            emit BountyPaid(answerId, answer.provider, bountyPerAnswer);
             
-            // Check if request should be closed
-            if (feedbackRequests[feedback.requestId].validFeedbacksCount >= 
-                feedbackRequests[feedback.requestId].feedbacksWanted) {
-                _closeRequest(feedback.requestId);
+            // Check if question should be closed
+            if (questions[answer.questionId].validAnswersCount >= 
+                questions[answer.questionId].answersNeeded) {
+                _closeQuestion(answer.questionId);
             }
         } else {
-            feedback.status = FeedbackStatus.NOT_VALID;
-            feedback.validatedAt = block.timestamp;
+            answer.status = AnswerStatus.REJECTED;
+            answer.validatedAt = block.timestamp;
         }
 
-        emit FeedbackValidated(feedbackId, feedback.requestId, feedback.status, msg.sender);
+        emit AnswerValidated(answerId, answer.questionId, answer.status, msg.sender);
     }
 
     /**
-     * @dev Close a request manually (only requester or owner)
-     * @param requestId ID of the request to close
+     * @dev Close a question manually (only asker or owner)
+     * @param questionId ID of the question to close
      */
-    function closeRequest(uint256 requestId) 
+    function closeQuestion(uint256 questionId) 
         external 
-        requestExists(requestId) 
-        requestOpen(requestId) 
+        questionExists(questionId) 
+        questionOpen(questionId) 
     {
-        FeedbackRequest storage request = feedbackRequests[requestId];
+        Question storage question = questions[questionId];
         require(
-            msg.sender == request.requester || msg.sender == owner(),
-            "Only requester or owner can close"
+            msg.sender == question.asker || msg.sender == owner(),
+            "Only asker or owner can close"
         );
         
-        _closeRequest(requestId);
+        _closeQuestion(questionId);
     }
 
-
-
-    /**
-     * @dev Get all feedbacks for a request
-     * @param requestId ID of the request
-     * @return Array of feedback IDs
-     */
-    function getRequestFeedbacks(uint256 requestId) 
-        external 
-        view 
-        requestExists(requestId) 
-        returns (uint256[] memory) 
-    {
-        return requestFeedbacks[requestId];
-    }
-
-    /**
-     * @dev Get all requests by a user
-     * @param user Address of the user
-     * @return Array of request IDs
-     */
-    function getUserRequests(address user) 
-        external 
-        view 
-        returns (uint256[] memory) 
-    {
-        return userRequests[user];
-    }
-
-    /**
-     * @dev Get all feedbacks by a user
-     * @param user Address of the user
-     * @return Array of feedback IDs
-     */
-    function getUserFeedbacks(address user) 
-        external 
-        view 
-        returns (uint256[] memory) 
-    {
-        return userFeedbacks[user];
-    }
-
-    /**
-     * @dev Add AI validator
-     * @param validator Address of the AI validator
-     */
+    // AI Validator Management
     function addAIValidator(address validator) external onlyOwner {
         aiValidators[validator] = true;
     }
 
-    /**
-     * @dev Remove AI validator
-     * @param validator Address of the AI validator
-     */
     function removeAIValidator(address validator) external onlyOwner {
         aiValidators[validator] = false;
     }
 
-    /**
-     * @dev Check if address is AI validator
-     * @param validator Address to check
-     * @return True if AI validator
-     */
     function isAIValidator(address validator) public view returns (bool) {
         return aiValidators[validator];
     }
 
-    /**
-     * @dev Emergency withdraw (only owner)
-     */
+    // Emergency functions
     function emergencyWithdraw() external onlyOwner {
         (bool success, ) = payable(owner()).call{value: address(this).balance}("");
         require(success, "Transfer failed");
     }
 
     // Internal functions
-    function _closeRequest(uint256 requestId) internal {
-        FeedbackRequest storage request = feedbackRequests[requestId];
-        request.status = RequestStatus.CLOSED;
-        request.closedAt = block.timestamp;
+    function _closeQuestion(uint256 questionId) internal {
+        Question storage question = questions[questionId];
+        question.status = QuestionStatus.CLOSED;
+        question.closedAt = block.timestamp;
 
-        emit RequestClosed(requestId, request.validFeedbacksCount, request.totalBounty);
+        emit QuestionClosed(questionId, question.validAnswersCount, question.bounty);
     }
 
-    // View functions for better UX
-    function getFeedbackRequest(uint256 requestId) 
+    // View functions
+    function getQuestion(uint256 questionId) 
         external 
         view 
-        requestExists(requestId) 
-        returns (FeedbackRequest memory) 
+        questionExists(questionId) 
+        returns (Question memory) 
     {
-        return feedbackRequests[requestId];
+        return questions[questionId];
     }
 
-    function getFeedback(uint256 feedbackId) 
+    function getAnswer(uint256 answerId) 
         external 
         view 
-        feedbackExists(feedbackId) 
-        returns (Feedback memory) 
+        answerExists(answerId) 
+        returns (Answer memory) 
     {
-        return feedbacks[feedbackId];
+        return answers[answerId];
     }
 
-    function getRequestStats(uint256 requestId) 
+    function getQuestionAnswers(uint256 questionId) 
         external 
         view 
-        requestExists(requestId) 
-        returns (
-            uint256 validCount,
-            uint256 totalCount,
-            uint256 wantedCount,
-            bool isComplete
-        ) 
+        questionExists(questionId) 
+        returns (uint256[] memory) 
     {
-        FeedbackRequest storage request = feedbackRequests[requestId];
-        return (
-            request.validFeedbacksCount,
-            request.totalFeedbacksCount,
-            request.feedbacksWanted,
-            request.validFeedbacksCount >= request.feedbacksWanted
-        );
+        return questionAnswers[questionId];
     }
 
-    /**
-     * @dev Get all non-fulfilled feedback requests (requests that need more valid feedbacks)
-     * @return Array of request IDs that are still open and need more valid feedbacks
-     */
-    function getNonFulfilledRequests() 
+    function getUserQuestions(address user) 
         external 
         view 
         returns (uint256[] memory) 
     {
-        uint256[] memory tempRequests = new uint256[](_requestIds);
+        return userQuestions[user];
+    }
+
+    function getUserAnswers(address user) 
+        external 
+        view 
+        returns (uint256[] memory) 
+    {
+        return userAnswers[user];
+    }
+
+    function getQuestionStats(uint256 questionId) 
+        external 
+        view 
+        questionExists(questionId) 
+        returns (
+            uint256 validCount,
+            uint256 totalCount,
+            uint256 neededCount,
+            bool isComplete
+        ) 
+    {
+        Question storage question = questions[questionId];
+        return (
+            question.validAnswersCount,
+            question.totalAnswersCount,
+            question.answersNeeded,
+            question.validAnswersCount >= question.answersNeeded
+        );
+    }
+
+    function getOpenQuestions() 
+        external 
+        view 
+        returns (uint256[] memory) 
+    {
+        uint256[] memory tempQuestions = new uint256[](_questionIds);
         uint256 count = 0;
         
-        for (uint256 i = 1; i <= _requestIds; i++) {
-            if (feedbackRequests[i].exists && 
-                feedbackRequests[i].status == RequestStatus.OPEN &&
-                feedbackRequests[i].validFeedbacksCount < feedbackRequests[i].feedbacksWanted) {
-                tempRequests[count] = i;
+        for (uint256 i = 1; i <= _questionIds; i++) {
+            if (questions[i].exists && 
+                questions[i].status == QuestionStatus.OPEN &&
+                questions[i].validAnswersCount < questions[i].answersNeeded) {
+                tempQuestions[count] = i;
                 count++;
             }
         }
@@ -412,7 +375,7 @@ contract AskWorld is Ownable, ReentrancyGuard {
         // Create properly sized array
         uint256[] memory result = new uint256[](count);
         for (uint256 i = 0; i < count; i++) {
-            result[i] = tempRequests[i];
+            result[i] = tempQuestions[i];
         }
         
         return result;

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import "../src/AskWorld.sol";
@@ -8,312 +8,527 @@ contract AskWorldTest is Test {
     AskWorld public askWorld;
     
     address public owner;
-    address public requester;
-    address public provider1;
-    address public provider2;
+    address public user1;
+    address public user2;
     address public aiValidator;
-
-    event FeedbackRequestCreated(
-        uint256 indexed requestId,
-        address indexed requester,
-        string instructions,
-        uint256 feedbacksWanted,
-        uint256 totalBounty
-    );
-
-    event FeedbackSubmitted(
-        uint256 indexed feedbackId,
-        uint256 indexed requestId,
-        address indexed provider,
-        string ipfsAudioHash
-    );
-
-    event FeedbackValidated(
-        uint256 indexed feedbackId,
-        uint256 indexed requestId,
-        AskWorld.FeedbackStatus status,
-        address validator
-    );
-
-    event RequestClosed(
-        uint256 indexed requestId,
-        uint256 validFeedbacksCount,
-        uint256 totalBounty
-    );
-
-    event BountyPaid(
-        uint256 indexed feedbackId,
-        address indexed provider,
-        uint256 amount
-    );
-
+    
     function setUp() public {
         owner = address(this);
-        requester = makeAddr("requester");
-        provider1 = makeAddr("provider1");
-        provider2 = makeAddr("provider2");
+        user1 = makeAddr("user1");
+        user2 = makeAddr("user2");
         aiValidator = makeAddr("aiValidator");
-
+        
         askWorld = new AskWorld();
+        
+        // Add AI validator
         askWorld.addAIValidator(aiValidator);
-
-        // Fund accounts
-        vm.deal(requester, 10 ether);
-        vm.deal(provider1, 1 ether);
-        vm.deal(provider2, 1 ether);
-    }
-
-    function test_Deployment() public view{
-        assertEq(askWorld.owner(), owner);
-        assertTrue(askWorld.isAIValidator(aiValidator));
-    }
-
-    function test_CreateFeedbackRequest() public {
-        string memory instructions = "Please provide feedback on our new feature";
-        uint256 feedbacksWanted = 3;
-        uint256 bounty = 0.1 ether;
-
-        vm.prank(requester);
-        vm.expectEmit(true, true, false, true);
-        emit FeedbackRequestCreated(1, requester, instructions, feedbacksWanted, bounty);
         
-        askWorld.createFeedbackRequest{value: bounty}(instructions, feedbacksWanted);
-
-        AskWorld.FeedbackRequest memory request = askWorld.getFeedbackRequest(1);
-        assertEq(request.requester, requester);
-        assertEq(request.instructions, instructions);
-        assertEq(request.feedbacksWanted, feedbacksWanted);
-        assertEq(request.totalBounty, bounty);
-        assertEq(uint256(request.status), 0); // OPEN
+        // Fund users
+        vm.deal(user1, 10 ether);
+        vm.deal(user2, 10 ether);
     }
-
-    function test_CreateFeedbackRequest_ZeroBounty() public {
-        vm.prank(requester);
+    
+    function testConstructor() public {
+        assertTrue(askWorld.owner() == owner);
+        assertTrue(askWorld.isAIValidator(owner));
+    }
+    
+    function testAskQuestion() public {
+        vm.startPrank(user1);
+        
+        askWorld.askQuestion{value: 1 ether}("What is the capital of France?", 2);
+        
+        AskWorld.Question memory question = askWorld.getQuestion(1);
+        assertEq(question.id, 1);
+        assertEq(question.asker, user1);
+        assertEq(question.prompt, "What is the capital of France?");
+        assertEq(question.answersNeeded, 2);
+        assertEq(question.bounty, 1 ether);
+        assertEq(question.validAnswersCount, 0);
+        assertEq(question.totalAnswersCount, 0);
+        assertEq(uint256(question.status), uint256(AskWorld.QuestionStatus.OPEN));
+        assertTrue(question.exists);
+        
+        vm.stopPrank();
+    }
+    
+    function testAskQuestionWithZeroBounty() public {
+        vm.startPrank(user1);
+        
         vm.expectRevert("Bounty must be greater than 0");
-        askWorld.createFeedbackRequest("Instructions", 1);
-    }
-
-    function test_SubmitFeedback() public {
-        // Create request first
-        vm.prank(requester);
-        askWorld.createFeedbackRequest{value: 0.1 ether}("Instructions", 2);
-
-        string memory ipfsHash = "QmTestHash123";
-
-        vm.prank(provider1);
-        vm.expectEmit(true, true, true, true);
-        emit FeedbackSubmitted(1, 1, provider1, ipfsHash);
+        askWorld.askQuestion{value: 0}("What is the capital of France?", 2);
         
-        askWorld.submitFeedback(1, ipfsHash);
-
-        AskWorld.Feedback memory feedback = askWorld.getFeedback(1);
-        assertEq(feedback.provider, provider1);
-        assertEq(feedback.ipfsAudioHash, ipfsHash);
-        assertEq(uint256(feedback.status), 0); // PENDING
+        vm.stopPrank();
     }
-
-    function test_SubmitFeedback_Duplicate() public {
-        // Create request first
-        vm.prank(requester);
-        askWorld.createFeedbackRequest{value: 0.1 ether}("Instructions", 2);
-
-        // Submit first feedback
-        vm.prank(provider1);
-        askWorld.submitFeedback(1, "QmHash1");
+    
+    function testAskQuestionWithZeroAnswers() public {
+        vm.startPrank(user1);
         
-        // Try to submit second feedback from same provider
-        vm.prank(provider1);
-        vm.expectRevert("Already submitted feedback for this request");
-        askWorld.submitFeedback(1, "QmHash2");
-    }
-
-    function test_ValidateAndPayFeedback_Valid() public {
-        // Create request and submit feedback
-        vm.prank(requester);
-        askWorld.createFeedbackRequest{value: 0.1 ether}("Instructions", 2);
-
-        vm.prank(provider1);
-        askWorld.submitFeedback(1, "QmHash1");
-
-        uint256 initialBalance = provider1.balance;
-
-        // Validate as valid and pay
-        vm.prank(aiValidator);
-        vm.expectEmit(true, true, false, true);
-        emit FeedbackValidated(1, 1, AskWorld.FeedbackStatus.VALID_AND_PAYED, aiValidator);
+        vm.expectRevert("Must need at least 1 answer");
+        askWorld.askQuestion{value: 1 ether}("What is the capital of France?", 0);
         
-        askWorld.validateAndPayFeedback(1, true);
-
-        AskWorld.Feedback memory feedback = askWorld.getFeedback(1);
-        assertEq(uint256(feedback.status), 2); // VALID_AND_PAYED
-        assertEq(provider1.balance, initialBalance + 0.05 ether); // Should be paid
+        vm.stopPrank();
     }
-
-    function test_ValidateAndPayFeedback_Invalid() public {
-        // Create request and submit feedback
-        vm.prank(requester);
-        askWorld.createFeedbackRequest{value: 0.1 ether}("Instructions", 2);
-
-        vm.prank(provider1);
-        askWorld.submitFeedback(1, "QmHash1");
-
-        // Validate as invalid
-        vm.prank(aiValidator);
-        vm.expectEmit(true, true, false, true);
-        emit FeedbackValidated(1, 1, AskWorld.FeedbackStatus.NOT_VALID, aiValidator);
+    
+    function testAskQuestionWithEmptyPrompt() public {
+        vm.startPrank(user1);
         
-        askWorld.validateAndPayFeedback(1, false);
-
-        AskWorld.Feedback memory feedback = askWorld.getFeedback(1);
-        assertEq(uint256(feedback.status), 1); // NOT_VALID
+        vm.expectRevert("Prompt cannot be empty");
+        askWorld.askQuestion{value: 1 ether}("", 2);
+        
+        vm.stopPrank();
     }
-
-    function test_ValidateAndPayFeedback_Unauthorized() public {
-        // Create request and submit feedback
-        vm.prank(requester);
-        askWorld.createFeedbackRequest{value: 0.1 ether}("Instructions", 2);
-
-        vm.prank(provider1);
-        askWorld.submitFeedback(1, "QmHash1");
-
-        // Try to validate without authorization
-        vm.prank(provider1);
+    
+    function testSubmitAnswer() public {
+        // First ask a question
+        vm.startPrank(user1);
+        askWorld.askQuestion{value: 1 ether}("What is the capital of France?", 2);
+        vm.stopPrank();
+        
+        // Submit an answer
+        vm.startPrank(user2);
+        askWorld.submitAnswer(1, "QmHash123");
+        
+        AskWorld.Answer memory answer = askWorld.getAnswer(1);
+        assertEq(answer.id, 1);
+        assertEq(answer.questionId, 1);
+        assertEq(answer.provider, user2);
+        assertEq(answer.audioHash, "QmHash123");
+        assertEq(uint256(answer.status), uint256(AskWorld.AnswerStatus.PENDING));
+        assertTrue(answer.exists);
+        
+        vm.stopPrank();
+    }
+    
+    function testSubmitAnswerToNonExistentQuestion() public {
+        vm.startPrank(user2);
+        
+        vm.expectRevert("Question does not exist");
+        askWorld.submitAnswer(999, "QmHash123");
+        
+        vm.stopPrank();
+    }
+    
+    function testSubmitAnswerToClosedQuestion() public {
+        // First ask a question
+        vm.startPrank(user1);
+        askWorld.askQuestion{value: 1 ether}("What is the capital of France?", 1);
+        vm.stopPrank();
+        
+        // Submit an answer
+        vm.startPrank(user2);
+        askWorld.submitAnswer(1, "QmHash123");
+        vm.stopPrank();
+        
+        // Validate the answer (this will close the question)
+        vm.startPrank(aiValidator);
+        askWorld.validateAnswer(1, true);
+        vm.stopPrank();
+        
+        // Try to submit another answer
+        vm.startPrank(user1);
+        vm.expectRevert("Question not open");
+        askWorld.submitAnswer(1, "QmHash456");
+        vm.stopPrank();
+    }
+    
+    function testSubmitDuplicateAnswer() public {
+        // First ask a question
+        vm.startPrank(user1);
+        askWorld.askQuestion{value: 1 ether}("What is the capital of France?", 2);
+        vm.stopPrank();
+        
+        // Submit an answer
+        vm.startPrank(user2);
+        askWorld.submitAnswer(1, "QmHash123");
+        
+        // Try to submit another answer from the same user
+        vm.expectRevert("Already submitted answer for this question");
+        askWorld.submitAnswer(1, "QmHash456");
+        
+        vm.stopPrank();
+    }
+    
+    function testSubmitAnswerWithEmptyHash() public {
+        // First ask a question
+        vm.startPrank(user1);
+        askWorld.askQuestion{value: 1 ether}("What is the capital of France?", 2);
+        vm.stopPrank();
+        
+        // Submit an answer with empty hash
+        vm.startPrank(user2);
+        vm.expectRevert("Audio hash cannot be empty");
+        askWorld.submitAnswer(1, "");
+        
+        vm.stopPrank();
+    }
+    
+    function testValidateAnswer() public {
+        // First ask a question
+        vm.startPrank(user1);
+        askWorld.askQuestion{value: 1 ether}("What is the capital of France?", 2);
+        vm.stopPrank();
+        
+        // Submit an answer
+        vm.startPrank(user2);
+        askWorld.submitAnswer(1, "QmHash123");
+        vm.stopPrank();
+        
+        // Validate the answer
+        vm.startPrank(aiValidator);
+        askWorld.validateAnswer(1, true);
+        
+        AskWorld.Answer memory answer = askWorld.getAnswer(1);
+        assertEq(uint256(answer.status), uint256(AskWorld.AnswerStatus.APPROVED));
+        
+        AskWorld.Question memory question = askWorld.getQuestion(1);
+        assertEq(question.validAnswersCount, 1);
+        
+        vm.stopPrank();
+    }
+    
+    function testValidateAnswerByNonValidator() public {
+        // First ask a question
+        vm.startPrank(user1);
+        askWorld.askQuestion{value: 1 ether}("What is the capital of France?", 2);
+        vm.stopPrank();
+        
+        // Submit an answer
+        vm.startPrank(user2);
+        askWorld.submitAnswer(1, "QmHash123");
+        vm.stopPrank();
+        
+        // Try to validate with non-validator
+        vm.startPrank(user1);
         vm.expectRevert("Not authorized");
-        askWorld.validateAndPayFeedback(1, true);
-    }
-
-    function test_RequestClosure_Automatic() public {
-        // Create request
-        vm.prank(requester);
-        askWorld.createFeedbackRequest{value: 0.1 ether}("Instructions", 2);
-
-        // Submit feedbacks
-        vm.prank(provider1);
-        askWorld.submitFeedback(1, "QmHash1");
-        vm.prank(provider2);
-        askWorld.submitFeedback(1, "QmHash2");
-
-        // Validate as valid and pay
-        vm.prank(aiValidator);
-        askWorld.validateAndPayFeedback(1, true);
-        vm.prank(aiValidator);
-        askWorld.validateAndPayFeedback(2, true);
-
-        // Check if request is closed
-        AskWorld.FeedbackRequest memory request = askWorld.getFeedbackRequest(1);
-        assertEq(uint256(request.status), 1); // CLOSED
-    }
-
-    function test_RequestClosure_Manual() public {
-        // Create request
-        vm.prank(requester);
-        askWorld.createFeedbackRequest{value: 0.1 ether}("Instructions", 2);
-
-        // Close manually
-        vm.prank(requester);
-        vm.expectEmit(true, false, false, true);
-        emit RequestClosed(1, 0, 0.1 ether);
+        askWorld.validateAnswer(1, true);
         
-        askWorld.closeRequest(1);
-
-        AskWorld.FeedbackRequest memory request = askWorld.getFeedbackRequest(1);
-        assertEq(uint256(request.status), 1); // CLOSED
+        vm.stopPrank();
     }
-
-
-
-    function test_GetRequestStats() public {
-        // Create request
-        vm.prank(requester);
-        askWorld.createFeedbackRequest{value: 0.1 ether}("Instructions", 3);
-
-        // Submit feedbacks
-        vm.prank(provider1);
-        askWorld.submitFeedback(1, "QmHash1");
-        vm.prank(provider2);
-        askWorld.submitFeedback(1, "QmHash2");
-
-        // Validate one as valid and pay
-        vm.prank(aiValidator);
-        askWorld.validateAndPayFeedback(1, true);
-
+    
+    function testValidateNonExistentAnswer() public {
+        vm.startPrank(aiValidator);
+        
+        vm.expectRevert("Answer does not exist");
+        askWorld.validateAnswer(999, true);
+        
+        vm.stopPrank();
+    }
+    
+    function testValidateAlreadyProcessedAnswer() public {
+        // First ask a question
+        vm.startPrank(user1);
+        askWorld.askQuestion{value: 1 ether}("What is the capital of France?", 2);
+        vm.stopPrank();
+        
+        // Submit an answer
+        vm.startPrank(user2);
+        askWorld.submitAnswer(1, "QmHash123");
+        vm.stopPrank();
+        
+        // Validate the answer
+        vm.startPrank(aiValidator);
+        askWorld.validateAnswer(1, true);
+        
+        // Try to validate again
+        vm.expectRevert("Answer already processed");
+        askWorld.validateAnswer(1, false);
+        
+        vm.stopPrank();
+    }
+    
+    function testRejectAnswer() public {
+        // First ask a question
+        vm.startPrank(user1);
+        askWorld.askQuestion{value: 1 ether}("What is the capital of France?", 2);
+        vm.stopPrank();
+        
+        // Submit an answer
+        vm.startPrank(user2);
+        askWorld.submitAnswer(1, "QmHash123");
+        vm.stopPrank();
+        
+        // Reject the answer
+        vm.startPrank(aiValidator);
+        askWorld.validateAnswer(1, false);
+        
+        AskWorld.Answer memory answer = askWorld.getAnswer(1);
+        assertEq(uint256(answer.status), uint256(AskWorld.AnswerStatus.REJECTED));
+        
+        AskWorld.Question memory question = askWorld.getQuestion(1);
+        assertEq(question.validAnswersCount, 0);
+        
+        vm.stopPrank();
+    }
+    
+    function testCloseQuestion() public {
+        // First ask a question
+        vm.startPrank(user1);
+        askWorld.askQuestion{value: 1 ether}("What is the capital of France?", 2);
+        vm.stopPrank();
+        
+        // Close the question
+        vm.startPrank(user1);
+        askWorld.closeQuestion(1);
+        
+        AskWorld.Question memory question = askWorld.getQuestion(1);
+        assertEq(uint256(question.status), uint256(AskWorld.QuestionStatus.CLOSED));
+        
+        vm.stopPrank();
+    }
+    
+    function testCloseQuestionByNonAsker() public {
+        // First ask a question
+        vm.startPrank(user1);
+        askWorld.askQuestion{value: 1 ether}("What is the capital of France?", 2);
+        vm.stopPrank();
+        
+        // Try to close by non-asker
+        vm.startPrank(user2);
+        vm.expectRevert("Only asker or owner can close");
+        askWorld.closeQuestion(1);
+        
+        vm.stopPrank();
+    }
+    
+    function testCloseNonExistentQuestion() public {
+        vm.startPrank(user1);
+        
+        vm.expectRevert("Question does not exist");
+        askWorld.closeQuestion(999);
+        
+        vm.stopPrank();
+    }
+    
+    function testCloseAlreadyClosedQuestion() public {
+        // First ask a question
+        vm.startPrank(user1);
+        askWorld.askQuestion{value: 1 ether}("What is the capital of France?", 2);
+        askWorld.closeQuestion(1);
+        vm.stopPrank();
+        
+        // Try to close again
+        vm.startPrank(user1);
+        vm.expectRevert("Question not open");
+        askWorld.closeQuestion(1);
+        
+        vm.stopPrank();
+    }
+    
+    function testAutoCloseQuestion() public {
+        // First ask a question
+        vm.startPrank(user1);
+        askWorld.askQuestion{value: 1 ether}("What is the capital of France?", 1);
+        vm.stopPrank();
+        
+        // Submit an answer
+        vm.startPrank(user2);
+        askWorld.submitAnswer(1, "QmHash123");
+        vm.stopPrank();
+        
+        // Validate the answer (this should auto-close the question)
+        vm.startPrank(aiValidator);
+        askWorld.validateAnswer(1, true);
+        
+        AskWorld.Question memory question = askWorld.getQuestion(1);
+        assertEq(uint256(question.status), uint256(AskWorld.QuestionStatus.CLOSED));
+        
+        vm.stopPrank();
+    }
+    
+    function testBountyPayment() public {
+        uint256 initialBalance = user2.balance;
+        
+        // First ask a question
+        vm.startPrank(user1);
+        askWorld.askQuestion{value: 1 ether}("What is the capital of France?", 1);
+        vm.stopPrank();
+        
+        // Submit an answer
+        vm.startPrank(user2);
+        askWorld.submitAnswer(1, "QmHash123");
+        vm.stopPrank();
+        
+        // Validate the answer
+        vm.startPrank(aiValidator);
+        askWorld.validateAnswer(1, true);
+        vm.stopPrank();
+        
+        // Check that bounty was paid
+        assertEq(user2.balance, initialBalance + 1 ether);
+    }
+    
+    function testMultipleAnswers() public {
+        // First ask a question
+        vm.startPrank(user1);
+        askWorld.askQuestion{value: 1 ether}("What is the capital of France?", 2);
+        vm.stopPrank();
+        
+        // Submit first answer
+        vm.startPrank(user2);
+        askWorld.submitAnswer(1, "QmHash123");
+        vm.stopPrank();
+        
+        // Submit second answer
+        address user3 = makeAddr("user3");
+        vm.deal(user3, 10 ether);
+        vm.startPrank(user3);
+        askWorld.submitAnswer(1, "QmHash456");
+        vm.stopPrank();
+        
+        // Validate both answers
+        vm.startPrank(aiValidator);
+        askWorld.validateAnswer(1, true);
+        askWorld.validateAnswer(2, true);
+        vm.stopPrank();
+        
+        // Check that question is closed
+        AskWorld.Question memory question = askWorld.getQuestion(1);
+        assertEq(uint256(question.status), uint256(AskWorld.QuestionStatus.CLOSED));
+        assertEq(question.validAnswersCount, 2);
+    }
+    
+    function testGetQuestionStats() public {
+        // First ask a question
+        vm.startPrank(user1);
+        askWorld.askQuestion{value: 1 ether}("What is the capital of France?", 2);
+        vm.stopPrank();
+        
+        // Submit an answer
+        vm.startPrank(user2);
+        askWorld.submitAnswer(1, "QmHash123");
+        vm.stopPrank();
+        
         // Get stats
-        (uint256 validCount, uint256 totalCount, uint256 wantedCount, bool isComplete) = 
-            askWorld.getRequestStats(1);
-
+        (uint256 validCount, uint256 totalCount, uint256 neededCount, bool isComplete) = askWorld.getQuestionStats(1);
+        assertEq(validCount, 0);
+        assertEq(totalCount, 1);
+        assertEq(neededCount, 2);
+        assertEq(isComplete, false);
+        
+        // Validate the answer
+        vm.startPrank(aiValidator);
+        askWorld.validateAnswer(1, true);
+        vm.stopPrank();
+        
+        // Get stats again
+        (validCount, totalCount, neededCount, isComplete) = askWorld.getQuestionStats(1);
         assertEq(validCount, 1);
-        assertEq(totalCount, 2);
-        assertEq(wantedCount, 3);
+        assertEq(totalCount, 1);
+        assertEq(neededCount, 2);
         assertEq(isComplete, false);
     }
-
-    function test_AddRemoveAIValidator() public {
+    
+    function testGetOpenQuestions() public {
+        // Ask multiple questions
+        vm.startPrank(user1);
+        askWorld.askQuestion{value: 1 ether}("Question 1", 1);
+        askWorld.askQuestion{value: 1 ether}("Question 2", 1);
+        askWorld.askQuestion{value: 1 ether}("Question 3", 1);
+        vm.stopPrank();
+        
+        // Get open questions
+        uint256[] memory openQuestions = askWorld.getOpenQuestions();
+        assertEq(openQuestions.length, 3);
+        assertEq(openQuestions[0], 1);
+        assertEq(openQuestions[1], 2);
+        assertEq(openQuestions[2], 3);
+        
+        // Close one question
+        vm.startPrank(user1);
+        askWorld.closeQuestion(1);
+        vm.stopPrank();
+        
+        // Get open questions again
+        openQuestions = askWorld.getOpenQuestions();
+        assertEq(openQuestions.length, 2);
+        assertEq(openQuestions[0], 2);
+        assertEq(openQuestions[1], 3);
+    }
+    
+    function testAIValidatorManagement() public {
         address newValidator = makeAddr("newValidator");
-
+        
         // Add validator
         askWorld.addAIValidator(newValidator);
         assertTrue(askWorld.isAIValidator(newValidator));
-
+        
         // Remove validator
         askWorld.removeAIValidator(newValidator);
         assertFalse(askWorld.isAIValidator(newValidator));
     }
-
-    function test_GetUserRequests() public {
-        // Create requests
-        vm.prank(requester);
-        askWorld.createFeedbackRequest{value: 0.1 ether}("Instructions1", 1);
-        vm.prank(requester);
-        askWorld.createFeedbackRequest{value: 0.1 ether}("Instructions2", 1);
-
-        uint256[] memory requests = askWorld.getUserRequests(requester);
-        assertEq(requests.length, 2);
-        assertEq(requests[0], 1);
-        assertEq(requests[1], 2);
-    }
-
-    function test_GetUserFeedbacks() public {
-        // Create request
-        vm.prank(requester);
-        askWorld.createFeedbackRequest{value: 0.1 ether}("Instructions", 2);
-
-        // Submit feedbacks
-        vm.prank(provider1);
-        askWorld.submitFeedback(1, "QmHash1");
-        vm.prank(provider2);
-        askWorld.submitFeedback(1, "QmHash2");
-
-        uint256[] memory feedbacks1 = askWorld.getUserFeedbacks(provider1);
-        uint256[] memory feedbacks2 = askWorld.getUserFeedbacks(provider2);
-
-        assertEq(feedbacks1.length, 1);
-        assertEq(feedbacks2.length, 1);
-        assertEq(feedbacks1[0], 1);
-        assertEq(feedbacks2[0], 2);
-    }
-
-    function test_GetNonFulfilledRequests() public {
-        // Create requests
-        vm.prank(requester);
-        askWorld.createFeedbackRequest{value: 0.1 ether}("Instructions1", 2);
-        vm.prank(requester);
-        askWorld.createFeedbackRequest{value: 0.1 ether}("Instructions2", 1);
-
-        // Submit feedbacks
-        vm.prank(provider1);
-        askWorld.submitFeedback(1, "QmHash1");
-        vm.prank(provider2);
-        askWorld.submitFeedback(2, "QmHash2");
-
-        // Validate one feedback for request 2 (fulfilling it)
-        vm.prank(aiValidator);
-        askWorld.validateAndPayFeedback(2, true);
-
-        // Get non-fulfilled requests
-        uint256[] memory nonFulfilled = askWorld.getNonFulfilledRequests();
+    
+    
+    function testGetUserQuestions() public {
+        // Ask questions from different users
+        vm.startPrank(user1);
+        askWorld.askQuestion{value: 1 ether}("Question 1", 1);
+        askWorld.askQuestion{value: 1 ether}("Question 2", 1);
+        vm.stopPrank();
         
-        // Should only have request 1 (request 2 is fulfilled)
-        assertEq(nonFulfilled.length, 1);
-        assertEq(nonFulfilled[0], 1);
+        vm.startPrank(user2);
+        askWorld.askQuestion{value: 1 ether}("Question 3", 1);
+        vm.stopPrank();
+        
+        // Get user questions
+        uint256[] memory user1Questions = askWorld.getUserQuestions(user1);
+        assertEq(user1Questions.length, 2);
+        assertEq(user1Questions[0], 1);
+        assertEq(user1Questions[1], 2);
+        
+        uint256[] memory user2Questions = askWorld.getUserQuestions(user2);
+        assertEq(user2Questions.length, 1);
+        assertEq(user2Questions[0], 3);
+    }
+    
+    function testGetUserAnswers() public {
+        // Ask a question
+        vm.startPrank(user1);
+        askWorld.askQuestion{value: 1 ether}("What is the capital of France?", 2);
+        vm.stopPrank();
+        
+        // Submit answers from different users
+        vm.startPrank(user2);
+        askWorld.submitAnswer(1, "QmHash123");
+        vm.stopPrank();
+        
+        address user3 = makeAddr("user3");
+        vm.deal(user3, 10 ether);
+        vm.startPrank(user3);
+        askWorld.submitAnswer(1, "QmHash456");
+        vm.stopPrank();
+        
+        // Get user answers
+        uint256[] memory user2Answers = askWorld.getUserAnswers(user2);
+        assertEq(user2Answers.length, 1);
+        assertEq(user2Answers[0], 1);
+        
+        uint256[] memory user3Answers = askWorld.getUserAnswers(user3);
+        assertEq(user3Answers.length, 1);
+        assertEq(user3Answers[0], 2);
+    }
+    
+    function testGetQuestionAnswers() public {
+        // Ask a question
+        vm.startPrank(user1);
+        askWorld.askQuestion{value: 1 ether}("What is the capital of France?", 2);
+        vm.stopPrank();
+        
+        // Submit answers
+        vm.startPrank(user2);
+        askWorld.submitAnswer(1, "QmHash123");
+        vm.stopPrank();
+        
+        address user3 = makeAddr("user3");
+        vm.deal(user3, 10 ether);
+        vm.startPrank(user3);
+        askWorld.submitAnswer(1, "QmHash456");
+        vm.stopPrank();
+        
+        // Get question answers
+        uint256[] memory answers = askWorld.getQuestionAnswers(1);
+        assertEq(answers.length, 2);
+        assertEq(answers[0], 1);
+        assertEq(answers[1], 2);
     }
 } 
