@@ -26,6 +26,9 @@ export default function AudioRecorder() {
     const [question, setQuestion] = useState('');
     const [submittingQuestion, setSubmittingQuestion] = useState(false);
     const [questionStatus, setQuestionStatus] = useState<string>('');
+    const [bountyPrice, setBountyPrice] = useState<string>('');
+    const [deadline, setDeadline] = useState<string>('');
+    const [maxSubmissions, setMaxSubmissions] = useState<string>('');
     const [currentCardIndex, setCurrentCardIndex] = useState(0);
     const [startX, setStartX] = useState(0);
     const [currentX, setCurrentX] = useState(0);
@@ -166,6 +169,33 @@ export default function AudioRecorder() {
             return;
         }
 
+        // Validate bounty price if provided
+        if (bountyPrice.trim()) {
+            const bountyValue = parseFloat(bountyPrice);
+            if (isNaN(bountyValue) || bountyValue <= 0) {
+                setQuestionStatus('Please enter a valid bounty price (positive number).');
+                return;
+            }
+        }
+
+        // Validate deadline if provided
+        if (deadline.trim()) {
+            const deadlineDate = new Date(deadline);
+            if (isNaN(deadlineDate.getTime()) || deadlineDate <= new Date()) {
+                setQuestionStatus('Please enter a valid future deadline.');
+                return;
+            }
+        }
+
+        // Validate max submissions if provided
+        if (maxSubmissions.trim()) {
+            const maxSubmissionsValue = parseInt(maxSubmissions);
+            if (isNaN(maxSubmissionsValue) || maxSubmissionsValue <= 0) {
+                setQuestionStatus('Please enter a valid number of submissions (positive integer).');
+                return;
+            }
+        }
+
         setSubmittingQuestion(true);
         setQuestionStatus('Submitting question...');
         setShowToast(false);
@@ -184,6 +214,9 @@ export default function AudioRecorder() {
             setToastType('success');
             setShowToast(true);
             setQuestion('');
+            setBountyPrice('');
+            setDeadline('');
+            setMaxSubmissions('');
 
             // Return to main page after a delay
             setTimeout(() => {
@@ -327,6 +360,52 @@ export default function AudioRecorder() {
                             className="w-full h-32 p-4 border border-gray-300 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-700 placeholder-gray-400"
                             disabled={submittingQuestion}
                         />
+                    </div>
+
+                    <div className="w-full mb-4">
+                        <div className="flex gap-4 mb-4">
+                            <div className="flex-1">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Bounty Price (ETH) (Optional)
+                                </label>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0.01"
+                                    value={bountyPrice}
+                                    onChange={(e) => setBountyPrice(e.target.value)}
+                                    placeholder="0.01"
+                                    className="w-full p-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-700 placeholder-gray-400"
+                                    disabled={submittingQuestion}
+                                />
+                            </div>
+                            <div className="flex-1">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Deadline (Optional)
+                                </label>
+                                <input
+                                    type="datetime-local"
+                                    value={deadline}
+                                    onChange={(e) => setDeadline(e.target.value)}
+                                    className="w-full p-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-700"
+                                    disabled={submittingQuestion}
+                                />
+                            </div>
+                        </div>
+                        <div className="w-full">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Number of Submissions Allowed (Optional)
+                            </label>
+                            <input
+                                type="number"
+                                min="1"
+                                value={maxSubmissions}
+                                onChange={(e) => setMaxSubmissions(e.target.value)}
+                                placeholder="5"
+                                className="w-full p-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-700 placeholder-gray-400"
+                                disabled={submittingQuestion}
+                            />
+                        </div>
                     </div>
 
                     {questionStatus && (
