@@ -1,7 +1,6 @@
 // src/components/AudioRecorder.tsx
 'use client';
 
-import { MiniKit } from '@worldcoin/minikit-js';
 import { useState, useRef } from 'react';
 
 export default function AudioRecorder() {
@@ -32,7 +31,7 @@ export default function AudioRecorder() {
             setIsRecording(true);
             setUploadStatus('');
         } catch (error) {
-            setUploadStatus('Failed to access microphone.');
+            setUploadStatus('Failed to access microphone: ' + (error as Error).message);
         }
     };
 
