@@ -2,10 +2,10 @@
 pragma solidity ^0.8.19;
 
 import "forge-std/Test.sol";
-import "../src/FeedbackSystem.sol";
+import "../src/AskWorld.sol";
 
-contract FeedbackSystemTest is Test {
-    FeedbackSystem public feedbackSystem;
+contract AskWorldTest is Test {
+    AskWorld public askWorld;
     
     address public owner;
     address public requester;
@@ -31,7 +31,7 @@ contract FeedbackSystemTest is Test {
     event FeedbackValidated(
         uint256 indexed feedbackId,
         uint256 indexed requestId,
-        FeedbackSystem.FeedbackStatus status,
+        AskWorld.FeedbackStatus status,
         address validator
     );
 
@@ -54,8 +54,8 @@ contract FeedbackSystemTest is Test {
         provider2 = makeAddr("provider2");
         aiValidator = makeAddr("aiValidator");
 
-        feedbackSystem = new FeedbackSystem();
-        feedbackSystem.addAIValidator(aiValidator);
+        askWorld = new AskWorld();
+        askWorld.addAIValidator(aiValidator);
 
         // Fund accounts
         vm.deal(requester, 10 ether);
@@ -64,8 +64,8 @@ contract FeedbackSystemTest is Test {
     }
 
     function test_Deployment() public view{
-        assertEq(feedbackSystem.owner(), owner);
-        assertTrue(feedbackSystem.isAIValidator(aiValidator));
+        assertEq(askWorld.owner(), owner);
+        assertTrue(askWorld.isAIValidator(aiValidator));
     }
 
     function test_CreateFeedbackRequest() public {
@@ -77,9 +77,9 @@ contract FeedbackSystemTest is Test {
         vm.expectEmit(true, true, false, true);
         emit FeedbackRequestCreated(1, requester, instructions, feedbacksWanted, bounty);
         
-        feedbackSystem.createFeedbackRequest{value: bounty}(instructions, feedbacksWanted);
+        askWorld.createFeedbackRequest{value: bounty}(instructions, feedbacksWanted);
 
-        FeedbackSystem.FeedbackRequest memory request = feedbackSystem.getFeedbackRequest(1);
+        AskWorld.FeedbackRequest memory request = askWorld.getFeedbackRequest(1);
         assertEq(request.requester, requester);
         assertEq(request.instructions, instructions);
         assertEq(request.feedbacksWanted, feedbacksWanted);
@@ -90,13 +90,13 @@ contract FeedbackSystemTest is Test {
     function test_CreateFeedbackRequest_ZeroBounty() public {
         vm.prank(requester);
         vm.expectRevert("Bounty must be greater than 0");
-        feedbackSystem.createFeedbackRequest("Instructions", 1);
+        askWorld.createFeedbackRequest("Instructions", 1);
     }
 
     function test_SubmitFeedback() public {
         // Create request first
         vm.prank(requester);
-        feedbackSystem.createFeedbackRequest{value: 0.1 ether}("Instructions", 2);
+        askWorld.createFeedbackRequest{value: 0.1 ether}("Instructions", 2);
 
         string memory ipfsHash = "QmTestHash123";
 
@@ -104,9 +104,9 @@ contract FeedbackSystemTest is Test {
         vm.expectEmit(true, true, true, true);
         emit FeedbackSubmitted(1, 1, provider1, ipfsHash);
         
-        feedbackSystem.submitFeedback(1, ipfsHash);
+        askWorld.submitFeedback(1, ipfsHash);
 
-        FeedbackSystem.Feedback memory feedback = feedbackSystem.getFeedback(1);
+        AskWorld.Feedback memory feedback = askWorld.getFeedback(1);
         assertEq(feedback.provider, provider1);
         assertEq(feedback.ipfsAudioHash, ipfsHash);
         assertEq(uint256(feedback.status), 0); // PENDING
@@ -115,36 +115,36 @@ contract FeedbackSystemTest is Test {
     function test_SubmitFeedback_Duplicate() public {
         // Create request first
         vm.prank(requester);
-        feedbackSystem.createFeedbackRequest{value: 0.1 ether}("Instructions", 2);
+        askWorld.createFeedbackRequest{value: 0.1 ether}("Instructions", 2);
 
         // Submit first feedback
         vm.prank(provider1);
-        feedbackSystem.submitFeedback(1, "QmHash1");
+        askWorld.submitFeedback(1, "QmHash1");
         
         // Try to submit second feedback from same provider
         vm.prank(provider1);
         vm.expectRevert("Already submitted feedback for this request");
-        feedbackSystem.submitFeedback(1, "QmHash2");
+        askWorld.submitFeedback(1, "QmHash2");
     }
 
     function test_ValidateAndPayFeedback_Valid() public {
         // Create request and submit feedback
         vm.prank(requester);
-        feedbackSystem.createFeedbackRequest{value: 0.1 ether}("Instructions", 2);
+        askWorld.createFeedbackRequest{value: 0.1 ether}("Instructions", 2);
 
         vm.prank(provider1);
-        feedbackSystem.submitFeedback(1, "QmHash1");
+        askWorld.submitFeedback(1, "QmHash1");
 
         uint256 initialBalance = provider1.balance;
 
         // Validate as valid and pay
         vm.prank(aiValidator);
         vm.expectEmit(true, true, false, true);
-        emit FeedbackValidated(1, 1, FeedbackSystem.FeedbackStatus.VALID_AND_PAYED, aiValidator);
+        emit FeedbackValidated(1, 1, AskWorld.FeedbackStatus.VALID_AND_PAYED, aiValidator);
         
-        feedbackSystem.validateAndPayFeedback(1, true);
+        askWorld.validateAndPayFeedback(1, true);
 
-        FeedbackSystem.Feedback memory feedback = feedbackSystem.getFeedback(1);
+        AskWorld.Feedback memory feedback = askWorld.getFeedback(1);
         assertEq(uint256(feedback.status), 2); // VALID_AND_PAYED
         assertEq(provider1.balance, initialBalance + 0.05 ether); // Should be paid
     }
@@ -152,71 +152,71 @@ contract FeedbackSystemTest is Test {
     function test_ValidateAndPayFeedback_Invalid() public {
         // Create request and submit feedback
         vm.prank(requester);
-        feedbackSystem.createFeedbackRequest{value: 0.1 ether}("Instructions", 2);
+        askWorld.createFeedbackRequest{value: 0.1 ether}("Instructions", 2);
 
         vm.prank(provider1);
-        feedbackSystem.submitFeedback(1, "QmHash1");
+        askWorld.submitFeedback(1, "QmHash1");
 
         // Validate as invalid
         vm.prank(aiValidator);
         vm.expectEmit(true, true, false, true);
-        emit FeedbackValidated(1, 1, FeedbackSystem.FeedbackStatus.NOT_VALID, aiValidator);
+        emit FeedbackValidated(1, 1, AskWorld.FeedbackStatus.NOT_VALID, aiValidator);
         
-        feedbackSystem.validateAndPayFeedback(1, false);
+        askWorld.validateAndPayFeedback(1, false);
 
-        FeedbackSystem.Feedback memory feedback = feedbackSystem.getFeedback(1);
+        AskWorld.Feedback memory feedback = askWorld.getFeedback(1);
         assertEq(uint256(feedback.status), 1); // NOT_VALID
     }
 
     function test_ValidateAndPayFeedback_Unauthorized() public {
         // Create request and submit feedback
         vm.prank(requester);
-        feedbackSystem.createFeedbackRequest{value: 0.1 ether}("Instructions", 2);
+        askWorld.createFeedbackRequest{value: 0.1 ether}("Instructions", 2);
 
         vm.prank(provider1);
-        feedbackSystem.submitFeedback(1, "QmHash1");
+        askWorld.submitFeedback(1, "QmHash1");
 
         // Try to validate without authorization
         vm.prank(provider1);
         vm.expectRevert("Not authorized");
-        feedbackSystem.validateAndPayFeedback(1, true);
+        askWorld.validateAndPayFeedback(1, true);
     }
 
     function test_RequestClosure_Automatic() public {
         // Create request
         vm.prank(requester);
-        feedbackSystem.createFeedbackRequest{value: 0.1 ether}("Instructions", 2);
+        askWorld.createFeedbackRequest{value: 0.1 ether}("Instructions", 2);
 
         // Submit feedbacks
         vm.prank(provider1);
-        feedbackSystem.submitFeedback(1, "QmHash1");
+        askWorld.submitFeedback(1, "QmHash1");
         vm.prank(provider2);
-        feedbackSystem.submitFeedback(1, "QmHash2");
+        askWorld.submitFeedback(1, "QmHash2");
 
         // Validate as valid and pay
         vm.prank(aiValidator);
-        feedbackSystem.validateAndPayFeedback(1, true);
+        askWorld.validateAndPayFeedback(1, true);
         vm.prank(aiValidator);
-        feedbackSystem.validateAndPayFeedback(2, true);
+        askWorld.validateAndPayFeedback(2, true);
 
         // Check if request is closed
-        FeedbackSystem.FeedbackRequest memory request = feedbackSystem.getFeedbackRequest(1);
+        AskWorld.FeedbackRequest memory request = askWorld.getFeedbackRequest(1);
         assertEq(uint256(request.status), 1); // CLOSED
     }
 
     function test_RequestClosure_Manual() public {
         // Create request
         vm.prank(requester);
-        feedbackSystem.createFeedbackRequest{value: 0.1 ether}("Instructions", 2);
+        askWorld.createFeedbackRequest{value: 0.1 ether}("Instructions", 2);
 
         // Close manually
         vm.prank(requester);
         vm.expectEmit(true, false, false, true);
         emit RequestClosed(1, 0, 0.1 ether);
         
-        feedbackSystem.closeRequest(1);
+        askWorld.closeRequest(1);
 
-        FeedbackSystem.FeedbackRequest memory request = feedbackSystem.getFeedbackRequest(1);
+        AskWorld.FeedbackRequest memory request = askWorld.getFeedbackRequest(1);
         assertEq(uint256(request.status), 1); // CLOSED
     }
 
@@ -225,21 +225,21 @@ contract FeedbackSystemTest is Test {
     function test_GetRequestStats() public {
         // Create request
         vm.prank(requester);
-        feedbackSystem.createFeedbackRequest{value: 0.1 ether}("Instructions", 3);
+        askWorld.createFeedbackRequest{value: 0.1 ether}("Instructions", 3);
 
         // Submit feedbacks
         vm.prank(provider1);
-        feedbackSystem.submitFeedback(1, "QmHash1");
+        askWorld.submitFeedback(1, "QmHash1");
         vm.prank(provider2);
-        feedbackSystem.submitFeedback(1, "QmHash2");
+        askWorld.submitFeedback(1, "QmHash2");
 
         // Validate one as valid and pay
         vm.prank(aiValidator);
-        feedbackSystem.validateAndPayFeedback(1, true);
+        askWorld.validateAndPayFeedback(1, true);
 
         // Get stats
         (uint256 validCount, uint256 totalCount, uint256 wantedCount, bool isComplete) = 
-            feedbackSystem.getRequestStats(1);
+            askWorld.getRequestStats(1);
 
         assertEq(validCount, 1);
         assertEq(totalCount, 2);
@@ -251,22 +251,22 @@ contract FeedbackSystemTest is Test {
         address newValidator = makeAddr("newValidator");
 
         // Add validator
-        feedbackSystem.addAIValidator(newValidator);
-        assertTrue(feedbackSystem.isAIValidator(newValidator));
+        askWorld.addAIValidator(newValidator);
+        assertTrue(askWorld.isAIValidator(newValidator));
 
         // Remove validator
-        feedbackSystem.removeAIValidator(newValidator);
-        assertFalse(feedbackSystem.isAIValidator(newValidator));
+        askWorld.removeAIValidator(newValidator);
+        assertFalse(askWorld.isAIValidator(newValidator));
     }
 
     function test_GetUserRequests() public {
         // Create requests
         vm.prank(requester);
-        feedbackSystem.createFeedbackRequest{value: 0.1 ether}("Instructions1", 1);
+        askWorld.createFeedbackRequest{value: 0.1 ether}("Instructions1", 1);
         vm.prank(requester);
-        feedbackSystem.createFeedbackRequest{value: 0.1 ether}("Instructions2", 1);
+        askWorld.createFeedbackRequest{value: 0.1 ether}("Instructions2", 1);
 
-        uint256[] memory requests = feedbackSystem.getUserRequests(requester);
+        uint256[] memory requests = askWorld.getUserRequests(requester);
         assertEq(requests.length, 2);
         assertEq(requests[0], 1);
         assertEq(requests[1], 2);
@@ -275,16 +275,16 @@ contract FeedbackSystemTest is Test {
     function test_GetUserFeedbacks() public {
         // Create request
         vm.prank(requester);
-        feedbackSystem.createFeedbackRequest{value: 0.1 ether}("Instructions", 2);
+        askWorld.createFeedbackRequest{value: 0.1 ether}("Instructions", 2);
 
         // Submit feedbacks
         vm.prank(provider1);
-        feedbackSystem.submitFeedback(1, "QmHash1");
+        askWorld.submitFeedback(1, "QmHash1");
         vm.prank(provider2);
-        feedbackSystem.submitFeedback(1, "QmHash2");
+        askWorld.submitFeedback(1, "QmHash2");
 
-        uint256[] memory feedbacks1 = feedbackSystem.getUserFeedbacks(provider1);
-        uint256[] memory feedbacks2 = feedbackSystem.getUserFeedbacks(provider2);
+        uint256[] memory feedbacks1 = askWorld.getUserFeedbacks(provider1);
+        uint256[] memory feedbacks2 = askWorld.getUserFeedbacks(provider2);
 
         assertEq(feedbacks1.length, 1);
         assertEq(feedbacks2.length, 1);
@@ -295,22 +295,22 @@ contract FeedbackSystemTest is Test {
     function test_GetNonFulfilledRequests() public {
         // Create requests
         vm.prank(requester);
-        feedbackSystem.createFeedbackRequest{value: 0.1 ether}("Instructions1", 2);
+        askWorld.createFeedbackRequest{value: 0.1 ether}("Instructions1", 2);
         vm.prank(requester);
-        feedbackSystem.createFeedbackRequest{value: 0.1 ether}("Instructions2", 1);
+        askWorld.createFeedbackRequest{value: 0.1 ether}("Instructions2", 1);
 
         // Submit feedbacks
         vm.prank(provider1);
-        feedbackSystem.submitFeedback(1, "QmHash1");
+        askWorld.submitFeedback(1, "QmHash1");
         vm.prank(provider2);
-        feedbackSystem.submitFeedback(2, "QmHash2");
+        askWorld.submitFeedback(2, "QmHash2");
 
         // Validate one feedback for request 2 (fulfilling it)
         vm.prank(aiValidator);
-        feedbackSystem.validateAndPayFeedback(2, true);
+        askWorld.validateAndPayFeedback(2, true);
 
         // Get non-fulfilled requests
-        uint256[] memory nonFulfilled = feedbackSystem.getNonFulfilledRequests();
+        uint256[] memory nonFulfilled = askWorld.getNonFulfilledRequests();
         
         // Should only have request 1 (request 2 is fulfilled)
         assertEq(nonFulfilled.length, 1);
