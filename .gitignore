@@ -202,3 +202,4 @@ logs/
 # *.bmp
 # *.tiff
 
+private_keys.json

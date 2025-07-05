@@ -15,7 +15,7 @@ import requests
 from dotenv import load_dotenv
 from openai import OpenAI
 
-load_dotenv()                                        # ← reads .env into env vars
+load_dotenv()                               # ← reads ../.env into env vars
 client = OpenAI()                                    # uses OPENAI_API_KEY
 
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "whisper-1")
