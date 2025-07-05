@@ -35,6 +35,7 @@ export default function AudioRecorder() {
     const [recordingDuration, setRecordingDuration] = useState(0);
     const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null);
     const [transactionId, setTransactionId] = useState<string | null>(null);
+    const [transactionPending, setTransactionPending] = useState(false);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
 
@@ -73,10 +74,34 @@ export default function AudioRecorder() {
         const handler = (payload: any) => {
             if (payload.status === "error") {
                 console.error("Error sending transaction", payload);
+                setTransactionPending(false);
+                setQuestionStatus('Transaction failed: ' + payload.error);
+                setToastType('error');
+                setShowToast(true);
             } else {
                 setTransactionId(payload.transaction_id);
+                setTransactionPending(false);
                 console.log("transaction_id:", payload.transaction_id);
                 console.log("transaction id:", transactionId);
+
+                // Handle success case
+                setQuestions(prev => {
+                    const maxId = prev.length > 0 ? Math.max(...prev.map(q => q.id)) : 0;
+                    return [...prev, { id: maxId + 1, text: question.trim() }];
+                });
+
+                setQuestionStatus('Question submitted successfully to contract!');
+                setToastType('success');
+                setShowToast(true);
+                setQuestion('');
+                setBountyPrice('');
+                setMaxSubmissions('');
+
+                // Return to main page after a delay
+                setTimeout(() => {
+                    setShowAskPage(false);
+                    setQuestionStatus('');
+                }, 2000);
             }
         };
         MiniKit.subscribe(ResponseEvent.MiniAppSendTransaction, handler);
@@ -177,8 +202,6 @@ export default function AudioRecorder() {
             }
         }
 
-
-
         // Validate max submissions if provided
         if (maxSubmissions.trim()) {
             const maxSubmissionsValue = parseInt(maxSubmissions);
@@ -189,37 +212,40 @@ export default function AudioRecorder() {
         }
 
         setSubmittingQuestion(true);
-        setQuestionStatus('Submitting question...');
+        setTransactionPending(true);
+        setQuestionStatus('Submitting question to contract...');
         setShowToast(false);
 
         try {
-            // Simulate API call
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            // Prepare parameters for askQuestion function
+            const prompt = question.trim();
+            const answersNeeded = maxSubmissions.trim() ? parseInt(maxSubmissions) : 1;
+            const value = "1"; // Send 1 wei as requested
 
-            // Add the new question to the list with a unique id
-            setQuestions(prev => {
-                const maxId = prev.length > 0 ? Math.max(...prev.map(q => q.id)) : 0;
-                return [...prev, { id: maxId + 1, text: question.trim() }];
+            // Send transaction to contract
+            const result = await MiniKit.commands.sendTransaction({
+                transaction: [
+                    {
+                        address: CONTRACT_ADDRESS,
+                        abi: CONTRACT_ABI,
+                        functionName: "askQuestion",
+                        args: [prompt, answersNeeded],
+                        value: value,
+                    },
+                ],
             });
 
-            setQuestionStatus('Question submitted successfully!');
-            setToastType('success');
-            setShowToast(true);
-            setQuestion('');
-            setBountyPrice('');
-            setMaxSubmissions('');
-
-            // Return to main page after a delay
-            setTimeout(() => {
-                setShowAskPage(false);
-                setQuestionStatus('');
-            }, 2000);
+            console.log('Transaction sent:', result);
+            // Note: We don't set transactionPending to false here
+            // It will be set to false in the transaction handler when the transaction is confirmed
+            // The success actions will be handled in the transaction handler
 
         } catch (error) {
-            console.error('Error submitting question:', error);
-            setQuestionStatus('Error submitting question: ' + (error as Error).message);
+            console.error('Error submitting question to contract:', error);
+            setQuestionStatus('Error submitting question to contract: ' + (error as Error).message);
             setToastType('error');
             setShowToast(true);
+            setTransactionPending(false);
         } finally {
             setSubmittingQuestion(false);
         }
@@ -386,10 +412,15 @@ export default function AudioRecorder() {
                         <div className="w-full flex gap-4 items-end justify-center">
                             <button
                                 onClick={handleQuestionSubmit}
-                                disabled={!question.trim() || submittingQuestion}
+                                disabled={!question.trim() || submittingQuestion || transactionPending}
                                 className="px-24 py-6 rounded-full font-semibold shadow-md bg-gradient-to-r from-green-500 to-blue-500 text-white hover:from-green-600 hover:to-blue-600 focus:outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50"
                             >
-                                {submittingQuestion ? 'Submitting...' : 'Submit'}
+                                {transactionPending ? (
+                                    <div className="flex items-center gap-2">
+                                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                                        <span>Processing...</span>
+                                    </div>
+                                ) : submittingQuestion ? 'Submitting...' : 'Submit'}
                             </button>
                         </div>
                     </div>
