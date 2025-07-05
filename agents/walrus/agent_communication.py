@@ -121,21 +121,41 @@ async def _request_transcription_via_rest(ctx: Context, audio_data: bytes, mime_
             if response_data.get("success"):
                 transcript = response_data.get("transcript", "")
                 ctx.logger.info(f"Transcription completed for blob {blob_id}")
-                return f"\n📝 Transcription: {transcript}"
+                return f"""
+
+📝 **Transcription Complete!**
+
+{transcript}"""
             else:
                 error_message = response_data.get("error_message", "Unknown error")
                 ctx.logger.error(f"Transcription failed for blob {blob_id}: {error_message}")
-                return f"\n❌ Transcription failed: {error_message}"
+                return f"""
+
+❌ **Transcription Failed**
+
+Error: {error_message}"""
         else:
             ctx.logger.error(f"Transcription request failed with status {response.status_code}: {response.text}")
-            return f"\n❌ Transcription request failed: HTTP {response.status_code}"
+            return f"""
+
+❌ **Transcription Request Failed**
+
+HTTP Status: {response.status_code}"""
         
     except requests.exceptions.ConnectionError:
         ctx.logger.error(f"Connection failed to voice-to-text agent at {VOICE_TO_TEXT_AGENT_ADDRESS}")
-        return f"\n❌ Transcription request failed: Connection error - make sure voice-to-text agent is running"
+        return f"""
+
+❌ **Transcription Request Failed**
+
+Connection error - make sure voice-to-text agent is running"""
     except Exception as exc:
         ctx.logger.error(f"Failed to send transcription request: {exc}")
-        return f"\n❌ Transcription request failed: {exc}"
+        return f"""
+
+❌ **Transcription Request Failed**
+
+Error: {exc}"""
 
 
 async def _request_transcription_via_agent(ctx: Context, audio_data: bytes, mime_type: str, blob_id: str, description: str = None):
@@ -165,15 +185,31 @@ async def _request_transcription_via_agent(ctx: Context, audio_data: bytes, mime
         if isinstance(response, AudioTranscriptionResponse):
             if response.success:
                 ctx.logger.info(f"Transcription completed for blob {blob_id}")
-                return f"\n📝 Transcription: {response.transcript}"
+                return f"""
+
+📝 **Transcription Complete!**
+
+{response.transcript}"""
             else:
                 error_message = response.error_message or "Unknown error"
                 ctx.logger.error(f"Transcription failed for blob {blob_id}: {error_message}")
-                return f"\n❌ Transcription failed: {error_message}"
+                return f"""
+
+❌ **Transcription Failed**
+
+Error: {error_message}"""
         else:
             ctx.logger.error(f"Failed to receive response from voice-to-text agent: {status}")
-            return f"\n❌ Transcription request failed: {status}"
+            return f"""
+
+❌ **Transcription Request Failed**
+
+Status: {status}"""
         
     except Exception as exc:
         ctx.logger.error(f"Failed to send transcription request to agent: {exc}")
-        return f"\n❌ Transcription request failed: {exc}" 
+        return f"""
+
+❌ **Transcription Request Failed**
+
+Error: {exc}""" 

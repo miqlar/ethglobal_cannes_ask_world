@@ -69,9 +69,14 @@ set_network_config() {
             CHAIN_ID="11155420"
             print_info "Using Worldcoin Sepolia testnet"
             ;;
+        "worldcoin-mainnet")
+            RPC_URL=${WORLDCHAIN_MAINNET_RPC_URL:-"https://worldchain-mainnet.g.alchemy.com/public"}
+            CHAIN_ID="480"
+            print_info "Using Worldcoin mainnet"
+            ;;
         *)
             print_error "Unknown network: $NETWORK"
-            print_info "Available networks: local, sepolia, base-sepolia, worldcoin-sepolia"
+            print_info "Available networks: local, sepolia, base-sepolia, worldcoin-sepolia, worldcoin-mainnet"
             exit 1
             ;;
     esac
@@ -114,6 +119,9 @@ check_environment() {
                     ;;
                 "worldcoin-sepolia")
                     print_info "export WORLDCHAIN_SEPOLIA_RPC_URL=your_rpc_url"
+                    ;;
+                "worldcoin-mainnet")
+                    print_info "export WORLDCHAIN_MAINNET_RPC_URL=your_rpc_url"
                     ;;
             esac
             exit 1

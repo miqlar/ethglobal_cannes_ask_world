@@ -36,6 +36,10 @@ deploy-base-sepolia:
 deploy-worldcoin:
 	./deploy.sh worldcoin-sepolia $(PRIVATE_KEY)
 
+# Deploy to Worldcoin Mainnet
+deploy-worldcoin-mainnet:
+	./deploy.sh worldcoin-mainnet $(PRIVATE_KEY)
+
 # Interact with deployed contract
 interact:
 	forge script script/Interact.s.sol --rpc-url $(RPC_URL) --broadcast
@@ -89,6 +93,7 @@ help:
 	@echo "  deploy-sepolia - Deploy to Sepolia (requires PRIVATE_KEY)"
 	@echo "  deploy-base-sepolia - Deploy to Base Sepolia (requires PRIVATE_KEY)"
 	@echo "  deploy-worldcoin - Deploy to Worldcoin Sepolia (requires PRIVATE_KEY)"
+	@echo "  deploy-worldcoin-mainnet - Deploy to Worldcoin Mainnet (requires PRIVATE_KEY)"
 	@echo "  interact       - Interact with deployed contract"
 	@echo "  clean          - Clean build artifacts"
 	@echo "  install        - Install dependencies"

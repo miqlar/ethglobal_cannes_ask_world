@@ -24,6 +24,7 @@ PRIVATE_KEY=your_private_key_here
 ETHEREUM_SEPOLIA_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com
 BASE_SEPOLIA_RPC_URL=https://sepolia.base.org
 WORLDCHAIN_SEPOLIA_RPC_URL=https://worldchain-sepolia.drpc.org
+WORLDCHAIN_MAINNET_RPC_URL=https://worldchain-mainnet.g.alchemy.com/public
 
 # Initial AI validator address (optional, defaults to deployer)
 INITIAL_AI_VALIDATOR=0x...
@@ -63,6 +64,9 @@ Deploy to a testnet (Sepolia, Base Sepolia, or Worldcoin Sepolia):
 
 # Worldcoin Sepolia
 ./deploy.sh worldcoin-sepolia 0xyour_private_key_here
+
+# Worldcoin Mainnet
+./deploy.sh worldcoin-mainnet 0xyour_private_key_here
 ```
 
 ### 3. Manual Deployment
@@ -106,7 +110,7 @@ The deployment script includes automatic contract verification. Make sure to set
 
 - **Etherscan**: For Ethereum Sepolia
 - **BaseScan**: For Base Sepolia
-- **Worldcoin**: For Worldcoin Sepolia
+- **Worldcoin**: For Worldcoin Sepolia and Mainnet
 
 ## Security Considerations
 

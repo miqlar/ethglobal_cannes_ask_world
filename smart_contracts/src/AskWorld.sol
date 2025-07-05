@@ -39,26 +39,26 @@ contract AskWorld is Ownable, ReentrancyGuard {
     }
 
     struct Answer {
-        uint256 id;
-        uint256 questionId;
         address provider;
         string audioHash;
         AnswerStatus status;
         uint256 submittedAt;
         uint256 validatedAt;
-        bool exists;
     }
 
     // State variables
     uint256 private _questionIds = 0;
-    uint256 private _answerIds = 0;
     
     mapping(uint256 => Question) public questions;
-    mapping(uint256 => Answer) public answers;
-    mapping(uint256 => uint256[]) public questionAnswers; // questionId => answerIds[]
+    mapping(uint256 => Answer[]) public questionAnswers; // questionId => Answer[]
     mapping(address => uint256[]) public userQuestions; // user => questionIds[]
-    mapping(address => uint256[]) public userAnswers; // user => answerIds[]
+    mapping(address => mapping(uint256 => uint256[])) public userAnswers; // user => questionId => answerIndices[]
     mapping(address => bool) public aiValidators;
+    
+    // Global counters
+    uint256 public totalQuestions;
+    uint256 public totalAnswers;
+    uint256 public totalValidAnswers;
 
     // Events
     event QuestionAsked(
@@ -106,10 +106,7 @@ contract AskWorld is Ownable, ReentrancyGuard {
         _;
     }
 
-    modifier answerExists(uint256 answerId) {
-        require(answers[answerId].exists, "Answer does not exist");
-        _;
-    }
+
 
     modifier questionOpen(uint256 questionId) {
         require(questions[questionId].status == QuestionStatus.OPEN, "Question not open");
@@ -152,6 +149,7 @@ contract AskWorld is Ownable, ReentrancyGuard {
 
         questions[questionId] = newQuestion;
         userQuestions[msg.sender].push(questionId);
+        totalQuestions++;
 
         emit QuestionAsked(
             questionId,
@@ -173,76 +171,69 @@ contract AskWorld is Ownable, ReentrancyGuard {
     ) external questionExists(questionId) questionOpen(questionId) {
         require(bytes(audioHash).length > 0, "Audio hash cannot be empty");
         
-        // Check if user already submitted answer for this question
-        uint256[] memory userAnswerIds = userAnswers[msg.sender];
-        for (uint256 i = 0; i < userAnswerIds.length; i++) {
-            require(
-                answers[userAnswerIds[i]].questionId != questionId,
-                "Already submitted answer for this question"
-            );
-        }
-
-        _answerIds++;
-        uint256 answerId = _answerIds;
+        // HACKATHON MODE: Removed constraint to allow multiple answers from same user for testing
 
         Answer memory newAnswer = Answer({
-            id: answerId,
-            questionId: questionId,
             provider: msg.sender,
             audioHash: audioHash,
             status: AnswerStatus.PENDING,
             submittedAt: block.timestamp,
-            validatedAt: 0,
-            exists: true
+            validatedAt: 0
         });
 
-        answers[answerId] = newAnswer;
-        questionAnswers[questionId].push(answerId);
-        userAnswers[msg.sender].push(answerId);
+        questionAnswers[questionId].push(newAnswer);
+        uint256 answerIndex = questionAnswers[questionId].length - 1;
+        userAnswers[msg.sender][questionId].push(answerIndex);
         
         questions[questionId].totalAnswersCount++;
+        totalAnswers++;
 
-        emit AnswerSubmitted(answerId, questionId, msg.sender, audioHash);
+        emit AnswerSubmitted(answerIndex, questionId, msg.sender, audioHash);
     }
 
     /**
      * @dev Validate an answer (only AI validators)
-     * @param answerId ID of the answer to validate
+     * @param questionId ID of the question containing the answer
+     * @param answerIndex Index of the answer within the question
      * @param isValid Whether the answer is valid
      */
     function validateAnswer(
-        uint256 answerId,
+        uint256 questionId,
+        uint256 answerIndex,
         bool isValid
-    ) external onlyAIValidator answerExists(answerId) nonReentrant {
-        Answer storage answer = answers[answerId];
-        require(answer.status == AnswerStatus.PENDING, "Answer already processed");
+    ) external onlyAIValidator questionExists(questionId) nonReentrant {
+        require(answerIndex < questionAnswers[questionId].length, "Answer does not exist");
+        require(questionAnswers[questionId][answerIndex].status == AnswerStatus.PENDING, "Answer already processed");
+
+        Answer storage answer = questionAnswers[questionId][answerIndex];
 
         if (isValid) {
             answer.status = AnswerStatus.APPROVED;
             answer.validatedAt = block.timestamp;
             
-            questions[answer.questionId].validAnswersCount++;
+            questions[questionId].validAnswersCount++;
+            totalValidAnswers++;
             
             // Pay the bounty immediately
-            uint256 bountyPerAnswer = questions[answer.questionId].bounty / 
-                                     questions[answer.questionId].answersNeeded;
+            uint256 bountyPerAnswer = questions[questionId].bounty / 
+                                     questions[questionId].answersNeeded;
             
             (bool success, ) = payable(answer.provider).call{value: bountyPerAnswer}("");
             require(success, "Transfer failed");
 
-            emit BountyPaid(answerId, answer.provider, bountyPerAnswer);
+            emit BountyPaid(answerIndex, answer.provider, bountyPerAnswer);
             
             // Check if question should be closed
-            if (questions[answer.questionId].validAnswersCount >= 
-                questions[answer.questionId].answersNeeded) {
-                _closeQuestion(answer.questionId);
+            if (questions[questionId].validAnswersCount >= 
+                questions[questionId].answersNeeded) {
+                _closeQuestion(questionId);
             }
         } else {
             answer.status = AnswerStatus.REJECTED;
             answer.validatedAt = block.timestamp;
         }
 
-        emit AnswerValidated(answerId, answer.questionId, answer.status, msg.sender);
+        emit AnswerValidated(answerIndex, questionId, answer.status, msg.sender);
     }
 
     /**
@@ -301,20 +292,21 @@ contract AskWorld is Ownable, ReentrancyGuard {
         return questions[questionId];
     }
 
-    function getAnswer(uint256 answerId) 
+    function getAnswer(uint256 questionId, uint256 answerIndex) 
         external 
         view 
-        answerExists(answerId) 
+        questionExists(questionId)
         returns (Answer memory) 
     {
-        return answers[answerId];
+        require(answerIndex < questionAnswers[questionId].length, "Answer does not exist");
+        return questionAnswers[questionId][answerIndex];
     }
 
     function getQuestionAnswers(uint256 questionId) 
         external 
         view 
         questionExists(questionId) 
-        returns (uint256[] memory) 
+        returns (Answer[] memory) 
     {
         return questionAnswers[questionId];
     }
@@ -327,12 +319,13 @@ contract AskWorld is Ownable, ReentrancyGuard {
         return userQuestions[user];
     }
 
-    function getUserAnswers(address user) 
+    function getUserAnswers(address user, uint256 questionId) 
         external 
         view 
+        questionExists(questionId)
         returns (uint256[] memory) 
     {
-        return userAnswers[user];
+        return userAnswers[user][questionId];
     }
 
     function getQuestionStats(uint256 questionId) 
@@ -379,5 +372,59 @@ contract AskWorld is Ownable, ReentrancyGuard {
         }
         
         return result;
+    }
+    
+    function getContractStats() 
+        external 
+        view 
+        returns (
+            uint256 totalQuestionsCount,
+            uint256 totalAnswersCount,
+            uint256 totalValidAnswersCount,
+            uint256 openQuestionsCount,
+            uint256 closedQuestionsCount
+        ) 
+    {
+        uint256 openCount = 0;
+        uint256 closedCount = 0;
+        
+        for (uint256 i = 1; i <= _questionIds; i++) {
+            if (questions[i].exists) {
+                if (questions[i].status == QuestionStatus.OPEN) {
+                    openCount++;
+                } else if (questions[i].status == QuestionStatus.CLOSED) {
+                    closedCount++;
+                }
+            }
+        }
+        
+        return (totalQuestions, totalAnswers, totalValidAnswers, openCount, closedCount);
+    }
+    
+    function getNextUnvalidatedAnswer() 
+        external 
+        view 
+        returns (
+            uint256 questionId,
+            uint256 answerIndex,
+            address provider,
+            string memory audioHash,
+            uint256 submittedAt
+        ) 
+    {
+        // Search through all questions to find the first unvalidated answer
+        for (uint256 q = 1; q <= _questionIds; q++) {
+            if (questions[q].exists && questions[q].status == QuestionStatus.OPEN) {
+                for (uint256 a = 0; a < questionAnswers[q].length; a++) {
+                    if (questionAnswers[q][a].status == AnswerStatus.PENDING) {
+                        Answer memory answer = questionAnswers[q][a];
+                        return (q, a, answer.provider, answer.audioHash, answer.submittedAt);
+                    }
+                }
+            }
+        }
+        
+        // No unvalidated answers found
+        revert("No unvalidated answers found");
     }
 } 

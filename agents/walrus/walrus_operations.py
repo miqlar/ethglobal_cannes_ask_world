@@ -48,12 +48,20 @@ def _upload_file_from_url(url: str) -> str:
         blob_id = response['newlyCreated']['blobObject']['blobId']
         blob_url = f"https://walruscan.com/testnet/blob/{blob_id}"
         
-        return f"✅ File uploaded successfully!\nBlob ID: {blob_id}\nView at: {blob_url}"
+        return f"""✅ **File Uploaded Successfully!**
+
+📋 **Details:**
+• **Blob ID:** `{blob_id}`
+• **View at:** {blob_url}"""
         
     except requests.exceptions.RequestException as exc:
-        return f"❌ Could not download file from URL → {exc}"
+        return f"""❌ **Upload Failed**
+
+Could not download file from URL: {exc}"""
     except Exception as exc:
-        return f"❌ Upload failed → {exc}"
+        return f"""❌ **Upload Failed**
+
+Error: {exc}"""
 
 
 def _upload_resource(data: bytes, mime_type: str) -> str:
@@ -82,10 +90,16 @@ def _upload_resource(data: bytes, mime_type: str) -> str:
         blob_id = response['newlyCreated']['blobObject']['blobId']
         blob_url = f"https://walruscan.com/testnet/blob/{blob_id}"
         
-        return f"✅ File uploaded successfully!\nBlob ID: {blob_id}\nView at: {blob_url}"
+        return f"""✅ **File Uploaded Successfully!**
+
+📋 **Details:**
+• **Blob ID:** `{blob_id}`
+• **View at:** {blob_url}"""
         
     except Exception as exc:
-        return f"❌ Upload failed → {exc}"
+        return f"""❌ **Upload Failed**
+
+Error: {exc}"""
 
 
 def _download_blob_data(blob_id: str) -> tuple[bytes, str]:
@@ -143,7 +157,20 @@ async def _download_blob(blob_id: str, ctx=None) -> str:
         # Get file size
         file_size = len(blob_data)
         
-        result = f"✅ Blob downloaded successfully!\nBlob ID: {blob_id}\nFile size: {file_size} bytes"
+        # Format file size nicely
+        if file_size > 1024 * 1024:
+            file_size_str = f"{file_size / (1024 * 1024):.1f} MB"
+        elif file_size > 1024:
+            file_size_str = f"{file_size / 1024:.1f} KB"
+        else:
+            file_size_str = f"{file_size} bytes"
+        
+        result = f"""✅ **Blob Downloaded Successfully!**
+
+📋 **Details:**
+• **Blob ID:** `{blob_id}`
+• **File Size:** {file_size_str}
+• **MIME Type:** {mime_type}"""
         
         # Check if it's an audio file and trigger transcription
         is_audio = (
@@ -156,7 +183,10 @@ async def _download_blob(blob_id: str, ctx=None) -> str:
         )
         
         if ctx and is_audio:
-            result += f"\n🎵 Audio file detected! (MIME: {mime_type}) Requesting transcription..."
+            result += f"""
+
+🎵 **Audio File Detected!**
+Requesting transcription..."""
             
             # Import here to avoid circular imports
             from agent_communication import request_audio_transcription
@@ -167,7 +197,7 @@ async def _download_blob(blob_id: str, ctx=None) -> str:
         return result
         
     except Exception as exc:
-        return f"❌ Download failed → {exc}"
+        return f"❌ **Download Failed**\n\nError: {exc}"
 
 
 async def handle_walrus_operation(content: List[Dict[str, Any]], intent_result: Dict[str, Any], ctx=None) -> str:
@@ -197,7 +227,9 @@ async def handle_walrus_operation(content: List[Dict[str, Any]], intent_result: 
         if blob_id:
             return await _download_blob(blob_id, ctx)
         else:
-            return "❌ No valid blob ID provided. Use format: `/download <blob_id>`"
+            return """❌ **No Valid Blob ID Provided**
+
+Please use the format: `/download <blob_id>`"""
     
     # Handle upload operations
     results = []
@@ -225,9 +257,15 @@ async def handle_walrus_operation(content: List[Dict[str, Any]], intent_result: 
                         response = client.put_blob(data=blob_data)
                         blob_id = response['newlyCreated']['blobObject']['blobId']
                         blob_url = f"https://walruscan.com/testnet/blob/{blob_id}"
-                        results.append(f"✅ Text uploaded successfully!\nBlob ID: {blob_id}\nView at: {blob_url}")
+                        results.append(f"""✅ **Text Uploaded Successfully!**
+
+📋 **Details:**
+• **Blob ID:** `{blob_id}`
+• **View at:** {blob_url}""")
                     except Exception as exc:
-                        results.append(f"❌ Text upload failed → {exc}")
+                        results.append(f"""❌ **Text Upload Failed**
+
+Error: {exc}""")
     
     # If no content but intent is upload_text, try to use extracted data
     if not results and intent == "upload_text":
@@ -238,8 +276,16 @@ async def handle_walrus_operation(content: List[Dict[str, Any]], intent_result: 
                 response = client.put_blob(data=blob_data)
                 blob_id = response['newlyCreated']['blobObject']['blobId']
                 blob_url = f"https://walruscan.com/testnet/blob/{blob_id}"
-                results.append(f"✅ Text uploaded successfully!\nBlob ID: {blob_id}\nView at: {blob_url}")
+                results.append(f"""✅ **Text Uploaded Successfully!**
+
+📋 **Details:**
+• **Blob ID:** `{blob_id}`
+• **View at:** {blob_url}""")
             except Exception as exc:
-                results.append(f"❌ Text upload failed → {exc}")
+                results.append(f"""❌ **Text Upload Failed**
+
+Error: {exc}""")
     
-    return "\n\n".join(results) if results else "No valid content found for upload." 
+    return "\n\n".join(results) if results else """❌ **No Valid Content Found**
+
+Please provide a file, URL, or text to upload.""" 

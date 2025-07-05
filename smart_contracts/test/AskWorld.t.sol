@@ -89,13 +89,10 @@ contract AskWorldTest is Test {
         vm.startPrank(user2);
         askWorld.submitAnswer(1, "QmHash123");
         
-        AskWorld.Answer memory answer = askWorld.getAnswer(1);
-        assertEq(answer.id, 1);
-        assertEq(answer.questionId, 1);
+        AskWorld.Answer memory answer = askWorld.getAnswer(1, 0);
         assertEq(answer.provider, user2);
         assertEq(answer.audioHash, "QmHash123");
         assertEq(uint256(answer.status), uint256(AskWorld.AnswerStatus.PENDING));
-        assertTrue(answer.exists);
         
         vm.stopPrank();
     }
@@ -122,7 +119,7 @@ contract AskWorldTest is Test {
         
         // Validate the answer (this will close the question)
         vm.startPrank(aiValidator);
-        askWorld.validateAnswer(1, true);
+        askWorld.validateAnswer(1, 0, true);
         vm.stopPrank();
         
         // Try to submit another answer
@@ -132,19 +129,36 @@ contract AskWorldTest is Test {
         vm.stopPrank();
     }
     
-    function testSubmitDuplicateAnswer() public {
+    function testSubmitMultipleAnswersFromSameUser() public {
         // First ask a question
         vm.startPrank(user1);
         askWorld.askQuestion{value: 1 ether}("What is the capital of France?", 2);
         vm.stopPrank();
         
-        // Submit an answer
+        // Submit first answer
         vm.startPrank(user2);
         askWorld.submitAnswer(1, "QmHash123");
         
-        // Try to submit another answer from the same user
-        vm.expectRevert("Already submitted answer for this question");
+        // Submit second answer from the same user (should work in hackathon mode)
         askWorld.submitAnswer(1, "QmHash456");
+        
+        // Check that both answers were created
+        AskWorld.Answer memory answer1 = askWorld.getAnswer(1, 0);
+        AskWorld.Answer memory answer2 = askWorld.getAnswer(1, 1);
+        
+        assertEq(answer1.provider, user2);
+        assertEq(answer1.audioHash, "QmHash123");
+        assertEq(answer2.provider, user2);
+        assertEq(answer2.audioHash, "QmHash456");
+        
+        // Check that question has 2 total answers
+        AskWorld.Question memory question = askWorld.getQuestion(1);
+        assertEq(question.totalAnswersCount, 2);
+        
+        // Check global counters
+        assertEq(askWorld.totalQuestions(), 1);
+        assertEq(askWorld.totalAnswers(), 2);
+        assertEq(askWorld.totalValidAnswers(), 0);
         
         vm.stopPrank();
     }
@@ -176,9 +190,9 @@ contract AskWorldTest is Test {
         
         // Validate the answer
         vm.startPrank(aiValidator);
-        askWorld.validateAnswer(1, true);
+        askWorld.validateAnswer(1, 0, true);
         
-        AskWorld.Answer memory answer = askWorld.getAnswer(1);
+        AskWorld.Answer memory answer = askWorld.getAnswer(1, 0);
         assertEq(uint256(answer.status), uint256(AskWorld.AnswerStatus.APPROVED));
         
         AskWorld.Question memory question = askWorld.getQuestion(1);
@@ -201,16 +215,7 @@ contract AskWorldTest is Test {
         // Try to validate with non-validator
         vm.startPrank(user1);
         vm.expectRevert("Not authorized");
-        askWorld.validateAnswer(1, true);
-        
-        vm.stopPrank();
-    }
-    
-    function testValidateNonExistentAnswer() public {
-        vm.startPrank(aiValidator);
-        
-        vm.expectRevert("Answer does not exist");
-        askWorld.validateAnswer(999, true);
+        askWorld.validateAnswer(1, 0, true);
         
         vm.stopPrank();
     }
@@ -228,11 +233,11 @@ contract AskWorldTest is Test {
         
         // Validate the answer
         vm.startPrank(aiValidator);
-        askWorld.validateAnswer(1, true);
+        askWorld.validateAnswer(1, 0, true);
         
         // Try to validate again
         vm.expectRevert("Answer already processed");
-        askWorld.validateAnswer(1, false);
+        askWorld.validateAnswer(1, 0, false);
         
         vm.stopPrank();
     }
@@ -250,9 +255,9 @@ contract AskWorldTest is Test {
         
         // Reject the answer
         vm.startPrank(aiValidator);
-        askWorld.validateAnswer(1, false);
+        askWorld.validateAnswer(1, 0, false);
         
-        AskWorld.Answer memory answer = askWorld.getAnswer(1);
+        AskWorld.Answer memory answer = askWorld.getAnswer(1, 0);
         assertEq(uint256(answer.status), uint256(AskWorld.AnswerStatus.REJECTED));
         
         AskWorld.Question memory question = askWorld.getQuestion(1);
@@ -328,7 +333,7 @@ contract AskWorldTest is Test {
         
         // Validate the answer (this should auto-close the question)
         vm.startPrank(aiValidator);
-        askWorld.validateAnswer(1, true);
+        askWorld.validateAnswer(1, 0, true);
         
         AskWorld.Question memory question = askWorld.getQuestion(1);
         assertEq(uint256(question.status), uint256(AskWorld.QuestionStatus.CLOSED));
@@ -351,7 +356,7 @@ contract AskWorldTest is Test {
         
         // Validate the answer
         vm.startPrank(aiValidator);
-        askWorld.validateAnswer(1, true);
+        askWorld.validateAnswer(1, 0, true);
         vm.stopPrank();
         
         // Check that bounty was paid
@@ -378,8 +383,8 @@ contract AskWorldTest is Test {
         
         // Validate both answers
         vm.startPrank(aiValidator);
-        askWorld.validateAnswer(1, true);
-        askWorld.validateAnswer(2, true);
+        askWorld.validateAnswer(1, 0, true);
+        askWorld.validateAnswer(1, 1, true);
         vm.stopPrank();
         
         // Check that question is closed
@@ -408,7 +413,7 @@ contract AskWorldTest is Test {
         
         // Validate the answer
         vm.startPrank(aiValidator);
-        askWorld.validateAnswer(1, true);
+        askWorld.validateAnswer(1, 0, true);
         vm.stopPrank();
         
         // Get stats again
@@ -499,13 +504,43 @@ contract AskWorldTest is Test {
         vm.stopPrank();
         
         // Get user answers
-        uint256[] memory user2Answers = askWorld.getUserAnswers(user2);
+        uint256[] memory user2Answers = askWorld.getUserAnswers(user2, 1);
         assertEq(user2Answers.length, 1);
-        assertEq(user2Answers[0], 1);
+        assertEq(user2Answers[0], 0);
         
-        uint256[] memory user3Answers = askWorld.getUserAnswers(user3);
+        uint256[] memory user3Answers = askWorld.getUserAnswers(user3, 1);
         assertEq(user3Answers.length, 1);
-        assertEq(user3Answers[0], 2);
+        assertEq(user3Answers[0], 1);
+    }
+    
+    function testGetContractStats() public {
+        // Ask multiple questions
+        vm.startPrank(user1);
+        askWorld.askQuestion{value: 1 ether}("Question 1", 1);
+        askWorld.askQuestion{value: 1 ether}("Question 2", 1);
+        askWorld.askQuestion{value: 1 ether}("Question 3", 1);
+        vm.stopPrank();
+        
+        // Submit answers
+        vm.startPrank(user2);
+        askWorld.submitAnswer(1, "QmHash123");
+        askWorld.submitAnswer(2, "QmHash456");
+        askWorld.submitAnswer(3, "QmHash789");
+        vm.stopPrank();
+        
+        // Validate one answer to close a question
+        vm.startPrank(aiValidator);
+        askWorld.validateAnswer(1, 0, true);
+        vm.stopPrank();
+        
+        // Get contract stats
+        (uint256 totalQuestions, uint256 totalAnswers, uint256 totalValidAnswers, uint256 openQuestions, uint256 closedQuestions) = askWorld.getContractStats();
+        
+        assertEq(totalQuestions, 3);
+        assertEq(totalAnswers, 3);
+        assertEq(totalValidAnswers, 1);
+        assertEq(openQuestions, 2);
+        assertEq(closedQuestions, 1);
     }
     
     function testGetQuestionAnswers() public {
@@ -526,9 +561,94 @@ contract AskWorldTest is Test {
         vm.stopPrank();
         
         // Get question answers
-        uint256[] memory answers = askWorld.getQuestionAnswers(1);
+        AskWorld.Answer[] memory answers = askWorld.getQuestionAnswers(1);
         assertEq(answers.length, 2);
-        assertEq(answers[0], 1);
-        assertEq(answers[1], 2);
+        assertEq(answers[0].provider, user2);
+        assertEq(answers[0].audioHash, "QmHash123");
+        assertEq(answers[1].provider, user3);
+        assertEq(answers[1].audioHash, "QmHash456");
+    }
+    
+    function testGetNextUnvalidatedAnswer() public {
+        // Ask a question
+        vm.startPrank(user1);
+        askWorld.askQuestion{value: 1 ether}("What is the capital of France?", 2);
+        vm.stopPrank();
+        
+        // Submit an answer
+        vm.startPrank(user2);
+        askWorld.submitAnswer(1, "QmHash123");
+        vm.stopPrank();
+        
+        // Get the next unvalidated answer
+        (uint256 questionId, uint256 answerIndex, address provider, string memory audioHash, uint256 submittedAt) = askWorld.getNextUnvalidatedAnswer();
+        
+        assertEq(questionId, 1);
+        assertEq(answerIndex, 0);
+        assertEq(provider, user2);
+        assertEq(audioHash, "QmHash123");
+        assertGt(submittedAt, 0);
+    }
+    
+    function testGetNextUnvalidatedAnswerNoAnswers() public {
+        // Try to get unvalidated answer when none exist
+        vm.expectRevert("No unvalidated answers found");
+        askWorld.getNextUnvalidatedAnswer();
+    }
+    
+    function testGetNextUnvalidatedAnswerAfterValidation() public {
+        // Ask a question
+        vm.startPrank(user1);
+        askWorld.askQuestion{value: 1 ether}("What is the capital of France?", 2);
+        vm.stopPrank();
+        
+        // Submit an answer
+        vm.startPrank(user2);
+        askWorld.submitAnswer(1, "QmHash123");
+        vm.stopPrank();
+        
+        // Validate the answer
+        vm.startPrank(aiValidator);
+        askWorld.validateAnswer(1, 0, true);
+        vm.stopPrank();
+        
+        // Try to get unvalidated answer - should revert
+        vm.expectRevert("No unvalidated answers found");
+        askWorld.getNextUnvalidatedAnswer();
+    }
+    
+    function testGetNextUnvalidatedAnswerMultipleQuestions() public {
+        // Ask multiple questions
+        vm.startPrank(user1);
+        askWorld.askQuestion{value: 1 ether}("Question 1", 1);
+        askWorld.askQuestion{value: 1 ether}("Question 2", 1);
+        vm.stopPrank();
+        
+        // Submit answers to both questions
+        vm.startPrank(user2);
+        askWorld.submitAnswer(1, "QmHash123");
+        askWorld.submitAnswer(2, "QmHash456");
+        vm.stopPrank();
+        
+        // Get the first unvalidated answer (should be from question 1)
+        (uint256 questionId, uint256 answerIndex, address provider, string memory audioHash,) = askWorld.getNextUnvalidatedAnswer();
+        
+        assertEq(questionId, 1);
+        assertEq(answerIndex, 0);
+        assertEq(provider, user2);
+        assertEq(audioHash, "QmHash123");
+        
+        // Validate the first answer
+        vm.startPrank(aiValidator);
+        askWorld.validateAnswer(1, 0, true);
+        vm.stopPrank();
+        
+        // Get the next unvalidated answer (should be from question 2)
+        (questionId, answerIndex, provider, audioHash,) = askWorld.getNextUnvalidatedAnswer();
+        
+        assertEq(questionId, 2);
+        assertEq(answerIndex, 0);
+        assertEq(provider, user2);
+        assertEq(audioHash, "QmHash456");
     }
 } 
