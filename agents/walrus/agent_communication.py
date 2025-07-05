@@ -11,11 +11,17 @@ from shared_models import BlobDownloadRequest, BlobDownloadResponse, AudioTransc
 
 agent_comm_proto = Protocol()
 
-# Voice-to-text agent REST endpoint for local communication
-VOICE_TO_TEXT_AGENT_ENDPOINT = "http://localhost:8002/transcribe"
+# Voice-to-text agent configuration
+# Can be either localhost (for REST) or remote agent address (for agent-to-agent)
+VOICE_TO_TEXT_AGENT_ADDRESS = os.getenv("VOICE_TO_TEXT_AGENT_ADDRESS", "http://localhost:8002/transcribe")
 
 # Debug logging
-print(f"🔗 Voice-to-text agent REST endpoint configured: {VOICE_TO_TEXT_AGENT_ENDPOINT}")
+print(f"🔗 Voice-to-text agent configured: {VOICE_TO_TEXT_AGENT_ADDRESS}")
+
+
+def is_localhost_address(address: str) -> bool:
+    """Check if the address is a localhost REST endpoint."""
+    return address.startswith(("http://localhost", "http://127.0.0.1")) or "localhost" in address
 
 
 @agent_comm_proto.on_message(model=BlobDownloadRequest)
@@ -72,7 +78,17 @@ async def handle_transcription_response(ctx: Context, sender: str, msg: AudioTra
 
 
 async def request_audio_transcription(ctx: Context, audio_data: bytes, mime_type: str, blob_id: str, description: str = None):
-    """Request audio transcription from the voice-to-text agent via REST endpoint."""
+    """Request audio transcription from the voice-to-text agent."""
+    
+    # Check if we're using localhost (REST) or remote agent (agent-to-agent)
+    if is_localhost_address(VOICE_TO_TEXT_AGENT_ADDRESS):
+        return await _request_transcription_via_rest(ctx, audio_data, mime_type, blob_id, description)
+    else:
+        return await _request_transcription_via_agent(ctx, audio_data, mime_type, blob_id, description)
+
+
+async def _request_transcription_via_rest(ctx: Context, audio_data: bytes, mime_type: str, blob_id: str, description: str = None):
+    """Request audio transcription via REST endpoint (for localhost)."""
     try:
         # Encode audio data as base64
         import base64
@@ -90,7 +106,7 @@ async def request_audio_transcription(ctx: Context, audio_data: bytes, mime_type
         
         # Make HTTP POST request to the REST endpoint
         response = requests.post(
-            VOICE_TO_TEXT_AGENT_ENDPOINT,
+            VOICE_TO_TEXT_AGENT_ADDRESS,
             json=request_payload,
             headers={"Content-Type": "application/json"},
             timeout=60.0
@@ -112,8 +128,49 @@ async def request_audio_transcription(ctx: Context, audio_data: bytes, mime_type
             return f"\n❌ Transcription request failed: HTTP {response.status_code}"
         
     except requests.exceptions.ConnectionError:
-        ctx.logger.error(f"Connection failed to voice-to-text agent at {VOICE_TO_TEXT_AGENT_ENDPOINT}")
+        ctx.logger.error(f"Connection failed to voice-to-text agent at {VOICE_TO_TEXT_AGENT_ADDRESS}")
         return f"\n❌ Transcription request failed: Connection error - make sure voice-to-text agent is running"
     except Exception as exc:
         ctx.logger.error(f"Failed to send transcription request: {exc}")
+        return f"\n❌ Transcription request failed: {exc}"
+
+
+async def _request_transcription_via_agent(ctx: Context, audio_data: bytes, mime_type: str, blob_id: str, description: str = None):
+    """Request audio transcription via agent-to-agent communication (for remote agents)."""
+    try:
+        # Encode audio data as base64
+        import base64
+        audio_data_base64 = base64.b64encode(audio_data).decode('utf-8')
+        
+        # Create the transcription request
+        request = AudioTranscriptionRequest(
+            audio_data_base64=audio_data_base64,
+            mime_type=mime_type,
+            source_blob_id=blob_id,
+            description=description
+        )
+        
+        ctx.logger.info(f"Sending transcription request to voice-to-text agent {VOICE_TO_TEXT_AGENT_ADDRESS} for blob {blob_id}")
+        
+        # Send request and wait for response
+        response, status = await ctx.send_and_receive(
+            VOICE_TO_TEXT_AGENT_ADDRESS, 
+            request, 
+            response_type=AudioTranscriptionResponse
+        )
+        
+        if isinstance(response, AudioTranscriptionResponse):
+            if response.success:
+                ctx.logger.info(f"Transcription completed for blob {blob_id}")
+                return f"\n📝 Transcription: {response.transcript}"
+            else:
+                error_message = response.error_message or "Unknown error"
+                ctx.logger.error(f"Transcription failed for blob {blob_id}: {error_message}")
+                return f"\n❌ Transcription failed: {error_message}"
+        else:
+            ctx.logger.error(f"Failed to receive response from voice-to-text agent: {status}")
+            return f"\n❌ Transcription request failed: {status}"
+        
+    except Exception as exc:
+        ctx.logger.error(f"Failed to send transcription request to agent: {exc}")
         return f"\n❌ Transcription request failed: {exc}" 
