@@ -131,6 +131,8 @@ def _download_blob_data(blob_id: str) -> tuple[bytes, str]:
             # Check if blob_id contains audio file extensions
             if any(ext in blob_id.lower() for ext in ['.mp3', '.wav', '.m4a', '.flac', '.ogg', '.aac']):
                 mime_type = "audio/mpeg"  # Default audio type
+            elif '.webm' in blob_id.lower():
+                mime_type = "audio/webm"  # WebM audio
             # Check file magic bytes for common audio formats
             elif blob_data.startswith(b'ID3') or blob_data.startswith(b'\xff\xfb'):
                 mime_type = "audio/mpeg"  # MP3
@@ -138,6 +140,8 @@ def _download_blob_data(blob_id: str) -> tuple[bytes, str]:
                 mime_type = "audio/wav"   # WAV
             elif blob_data.startswith(b'ftyp'):
                 mime_type = "audio/mp4"   # M4A
+            elif blob_data.startswith(b'\x1a\x45\xdf\xa3'):
+                mime_type = "audio/webm"  # WebM (Matroska container)
         
         # Clean up the temporary file
         os.remove(tmp.name)
@@ -175,11 +179,12 @@ async def _download_blob(blob_id: str, ctx=None) -> str:
         # Check if it's an audio file and trigger transcription
         is_audio = (
             mime_type.startswith("audio/") or 
-            any(ext in blob_id.lower() for ext in ['.mp3', '.wav', '.m4a', '.flac', '.ogg', '.aac']) or
+            any(ext in blob_id.lower() for ext in ['.mp3', '.wav', '.m4a', '.flac', '.ogg', '.aac', '.webm']) or
             blob_data.startswith(b'ID3') or  # MP3
             blob_data.startswith(b'\xff\xfb') or  # MP3
             blob_data.startswith(b'RIFF') or  # WAV
-            blob_data.startswith(b'ftyp')  # M4A
+            blob_data.startswith(b'ftyp') or  # M4A
+            blob_data.startswith(b'\x1a\x45\xdf\xa3')  # WebM
         )
         
         if ctx and is_audio:

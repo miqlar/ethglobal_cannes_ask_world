@@ -78,4 +78,19 @@ class TextUploadResponse(Model):
     blob_id: str
     blob_url: str
     success: bool
+    error_message: Optional[str] = None
+
+
+class BlobTranscriptionRequest(Model):
+    """Request model for blob transcription."""
+    blob_id: str
+    request_id: str
+
+
+class BlobTranscriptionResponse(Model):
+    """Response model for blob transcription."""
+    transcript: str
+    blob_id: str
+    request_id: str
+    success: bool
     error_message: Optional[str] = None 

@@ -1,5 +1,5 @@
 """
-Simple Blockchain Agent for reading Worldcoin Sepolia contract.
+Simple Blockchain Agent for reading Worldcoin Mainnet contract.
 """
 
 from uagents import Agent
@@ -28,7 +28,29 @@ async def handle_function_call_rest(ctx, req: FunctionCallRequest) -> FunctionCa
     try:
         from blockchain_operations import handle_blockchain_request
         
-        result = handle_blockchain_request(req.function_name)
+        # Parse arguments if provided in the function name
+        # Format: function_name(arg1,arg2,...)
+        if '(' in req.function_name and req.function_name.endswith(')'):
+            func_name = req.function_name.split('(')[0]
+            args_str = req.function_name.split('(')[1].rstrip(')')
+            
+            # Parse arguments
+            args = []
+            if args_str:
+                for arg in args_str.split(','):
+                    arg = arg.strip()
+                    # Try to convert to int if it's a number
+                    try:
+                        if arg.startswith('0x'):
+                            args.append(int(arg, 16))
+                        else:
+                            args.append(int(arg))
+                    except ValueError:
+                        args.append(arg)
+            
+            result = await handle_blockchain_request(func_name, *args)
+        else:
+            result = await handle_blockchain_request(req.function_name)
         
         if result.startswith("✅"):
             return FunctionCallResponse(

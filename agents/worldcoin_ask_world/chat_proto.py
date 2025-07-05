@@ -62,8 +62,12 @@ async def handle_message(ctx: Context, sender: str, msg: ChatMessage):
         return
     
     # Handle the blockchain request
-    result = handle_blockchain_request(user_message)
-    await ctx.send(sender, _chat(result))
+    try:
+        result = await handle_blockchain_request(ctx, user_message)
+        await ctx.send(sender, _chat(result))
+    except Exception as e:
+        error_msg = f"❌ Error processing request: {str(e)}"
+        await ctx.send(sender, _chat(error_msg))
 
 
 @chat_proto.on_message(ChatAcknowledgement)

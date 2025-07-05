@@ -52,7 +52,14 @@ def get_audio_transcription(content: List[Dict[str, Any]]) -> str:
     for item in content:
         if item.get("type") == "resource" and item.get("mime_type", "").startswith("audio/"):
             audio_bytes = base64.b64decode(item["contents"])
-            ext = "." + item["mime_type"].split("/")[-1]
+            mime_type = item["mime_type"]
+            
+            # Handle webm files specially - they need .webm extension
+            if mime_type == "audio/webm":
+                ext = ".webm"
+            else:
+                ext = "." + mime_type.split("/")[-1]
+            
             path = _save_to_temp(audio_bytes, ext)
             transcripts.append(_transcribe_file(path))
             os.remove(path)
@@ -72,6 +79,9 @@ def get_audio_transcription(content: List[Dict[str, Any]]) -> str:
                         r.raise_for_status()
                         # Infer an extension, default to .mp3
                         suffix = os.path.splitext(url)[-1] or ".mp3"
+                        # Handle webm files
+                        if suffix.lower() == '.webm':
+                            suffix = '.webm'
                         path   = _save_to_temp(r.content, suffix)
                 except requests.exceptions.RequestException as exc:
                     transcripts.append(f"❌ Could not download audio → {exc}")
