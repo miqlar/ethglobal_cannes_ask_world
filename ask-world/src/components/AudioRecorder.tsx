@@ -687,7 +687,7 @@ export default function AudioRecorder() {
                             )}
                             {questions[currentCardIndex].answerStatus === 2 && (
                                 <div className="flex items-center justify-center mt-2">
-                                    <span className="text-green-800 font-medium text-xl animate-bounce">🎉 Answer Approved!</span>
+                                    <span className="text-green-800 font-medium text-xl animate-bounce">🎉 Answer approved!</span>
                                 </div>
                             )}
                             {questions[currentCardIndex].answerStatus === 3 && (
@@ -703,8 +703,8 @@ export default function AudioRecorder() {
                         </div>
                         <div className="flex items-center gap-2 mb-4">
                             {questions[currentCardIndex].answerStatus === 2 ? (
-                                <span className="text-lg font-semibold text-green-800">
-                                    💰 {(questions[currentCardIndex].reward * 100000).toFixed(2)} USDC Reward Received
+                                <span className="text-lg font-semibold text-green-800 animate-reward-received">
+                                    💰 You have received {(questions[currentCardIndex].reward * 100000).toFixed(2)} USDC Reward
                                 </span>
                             ) : questions[currentCardIndex].answerStatus === 3 ? null : (
                                 <span className="text-lg font-semibold text-green-600">
@@ -822,6 +822,36 @@ export default function AudioRecorder() {
                 }
                 .animate-pop {
                     animation: pop 0.5s cubic-bezier(0.4,0,0.2,1);
+                }
+                @keyframes reward-received {
+                    0% { 
+                        transform: scale(1); 
+                        opacity: 1;
+                        text-shadow: 0 0 0 rgba(34, 197, 94, 0);
+                    }
+                    25% { 
+                        transform: scale(1.1); 
+                        opacity: 1;
+                        text-shadow: 0 0 10px rgba(34, 197, 94, 0.5);
+                    }
+                    50% { 
+                        transform: scale(1.05); 
+                        opacity: 1;
+                        text-shadow: 0 0 15px rgba(34, 197, 94, 0.7);
+                    }
+                    75% { 
+                        transform: scale(1.08); 
+                        opacity: 1;
+                        text-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
+                    }
+                    100% { 
+                        transform: scale(1); 
+                        opacity: 1;
+                        text-shadow: 0 0 0 rgba(34, 197, 94, 0);
+                    }
+                }
+                .animate-reward-received {
+                    animation: reward-received 2s ease-in-out infinite;
                 }
                 .start-recording-btn {
                     width: 8rem;
