@@ -665,17 +665,17 @@ export default function AudioRecorder() {
                             </h2>
                             {questions[currentCardIndex].answerStatus === 1 && (
                                 <div className="flex items-center justify-center mt-2">
-                                    <span className="text-yellow-800 font-medium text-lg">⏳ Answer Validated - Pending AI Validation</span>
+                                    <span className="text-yellow-800 font-medium text-lg">⏳ AI Agent Checking Answer</span>
                                 </div>
                             )}
                             {questions[currentCardIndex].answerStatus === 2 && (
                                 <div className="flex items-center justify-center mt-2">
-                                    <span className="text-green-800 font-medium text-xl animate-bounce">🎉 Answer Validated - Approved!</span>
+                                    <span className="text-green-800 font-medium text-xl animate-bounce">🎉 Answer Approved!</span>
                                 </div>
                             )}
                             {questions[currentCardIndex].answerStatus === 3 && (
                                 <div className="flex items-center justify-center mt-2">
-                                    <span className="text-red-800 font-medium text-lg">😔 Answer Validated - Rejected</span>
+                                    <span className="text-red-800 font-medium text-lg">😔 Answer Rejected</span>
                                 </div>
                             )}
                         </div>
