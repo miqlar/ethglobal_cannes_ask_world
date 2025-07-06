@@ -6,11 +6,15 @@ import os
 import json
 import asyncio
 import base64
+import requests
 from typing import Any
 from dotenv import load_dotenv
 from web3 import Web3
 
-load_dotenv("../.env")
+# Load environment variables from multiple possible locations
+load_dotenv("../.env")  # agents/.env
+load_dotenv("../../.env")  # root .env
+load_dotenv(".env")  # current directory .env
 
 # Import configuration
 try:
@@ -20,6 +24,12 @@ except ImportError:
     CONTRACT_ADDRESS = "0x185591a5DC4B65B8B7AF5befca02C702F23C476C"
     WORLDCOIN_MAINNET_RPC = "https://worldchain-mainnet.g.alchemy.com/public"
     WALRUS_AGENT_ADDRESS = "agent1qfxa0vgsvwcp43ykgnysqp5aj2kc90xnxrhphl2jnc34p0p7hkej2srxnsq"
+
+# Get private key for transactions
+PRIVATE_KEY = os.getenv("PRIVATE_KEY")
+if not PRIVATE_KEY:
+    print("⚠️  Warning: PRIVATE_KEY not found in environment variables. Transaction functions will not work.")
+    print("   Set PRIVATE_KEY in your .env file to enable transaction functionality.")
 
 # Load ABI from the JSON file
 def load_abi():
@@ -79,6 +89,208 @@ async def send_audio_to_voice_agent(ctx, audio_hash: str) -> str:
     except Exception as e:
         return f"❌ Error communicating with Walrus agent: {e}"
 
+async def validate_transcription_with_llm(question_prompt: str, transcription: str) -> tuple[bool, str]:
+    """
+    Validate if the transcription is a valid answer to the question using GPT-4o.
+    Returns (is_valid: bool, reason: str)
+    """
+    try:
+        import openai
+        
+        # Get OpenAI API key from environment
+        api_key = os.getenv("OPENAI_API_KEY")
+        
+        if not api_key:
+            return False, "OpenAI API key not found in environment variables"
+        
+        client = openai.AsyncOpenAI(api_key=api_key)
+        
+        prompt = f"""You are an AI validator for audio transcriptions. Your job is to determine if a transcribed audio answer is a valid response to a given question.
+
+Question: "{question_prompt}"
+Transcribed Answer: "{transcription}"
+
+Please analyze if this transcription is a valid answer to the question. Consider:
+1. Is it a meaningful response (not just "um", "uh", or silence)?
+2. Is it relevant to the question being asked?
+3. Does it provide useful information or attempt to answer the question?
+
+Respond with ONLY "TRUE" or "FALSE" followed by a brief reason (max 100 characters).
+
+Example responses:
+- "TRUE - Provides relevant restaurant recommendation"
+- "FALSE - Just says 'I don't know'"
+- "FALSE - Transcription too short to be meaningful"
+- "TRUE - Mentions pizza places in Rome as requested"
+
+Your response:"""
+
+        response = await client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=150,
+            temperature=0.1
+        )
+        
+        result = response.choices[0].message.content.strip()
+        
+        # Parse the response
+        if result.upper().startswith("TRUE"):
+            return True, result[5:].strip()  # Remove "TRUE - " prefix
+        elif result.upper().startswith("FALSE"):
+            return False, result[6:].strip()  # Remove "FALSE - " prefix
+        else:
+            # Fallback parsing
+            return True, result
+            
+    except Exception as e:
+        return False, f"Error during GPT-4o validation: {e}"
+
+async def validate_answer_transaction(question_id: int, answer_index: int, is_valid: bool) -> str:
+    """
+    Submit a transaction to validate an answer on the blockchain.
+    
+    Args:
+        question_id: ID of the question
+        answer_index: Index of the answer within the question
+        is_valid: Whether the answer is valid or not
+        
+    Returns:
+        String with transaction result or error message
+    """
+    try:
+        if not PRIVATE_KEY:
+            return "❌ Private key not configured. Set PRIVATE_KEY in environment variables."
+        
+        # Create account from private key
+        account = w3.eth.account.from_key(PRIVATE_KEY)
+        address = account.address
+        
+        # Debug network information and verify we're on Worldcoin mainnet
+        try:
+            chain_id = w3.eth.chain_id
+            print(f"🔍 Debug: Connected to chain ID: {chain_id}")
+            print(f"🔍 Debug: Account address: {address}")
+            
+            # Verify we're on Worldcoin mainnet (chain ID 480)
+            if chain_id != 480:
+                return f"❌ Wrong network! Connected to chain ID {chain_id}, but need Worldcoin mainnet (chain ID 480). Please check your RPC URL."
+            else:
+                print(f"✅ Connected to Worldcoin mainnet (chain ID 480)")
+                
+        except Exception as e:
+            print(f"🔍 Debug: Could not get chain ID: {e}")
+            return f"❌ Failed to verify network connection: {e}"
+        
+        # Check if the address is an AI validator
+        try:
+            is_validator = contract.functions.isAIValidator(address).call()
+            if not is_validator:
+                return f"❌ Address {address} is not authorized as an AI validator on the contract."
+        except Exception as e:
+            return f"❌ Error checking AI validator status: {e}"
+        
+        # Build the transaction
+        function_call = contract.functions.validateAnswer(question_id, answer_index, is_valid)
+        
+        # Estimate gas
+        try:
+            gas_estimate = function_call.estimate_gas({'from': address})
+            gas_limit = int(gas_estimate * 1.2)  # Add 20% buffer
+        except Exception as e:
+            return f"❌ Gas estimation failed: {e}"
+        
+        # Get current gas price
+        try:
+            gas_price = w3.eth.gas_price
+        except Exception as e:
+            return f"❌ Failed to get gas price: {e}"
+        
+        # Get nonce - use actual account nonce but handle carefully
+        try:
+            nonce = w3.eth.get_transaction_count(address)
+            # Ensure nonce is a proper integer
+            nonce = int(nonce)
+            
+            # Validate nonce is reasonable
+            if nonce > 1000000:  # Sanity check - if nonce is > 1M, something is wrong
+                return f"❌ Nonce value too high: {nonce}. This suggests a network or account issue."
+            
+            print(f"🔍 Debug: Account nonce: {nonce} (type: {type(nonce)})")
+            
+            # Ensure nonce is a clean integer to avoid RLP encoding issues
+            nonce = int(str(nonce))
+            
+        except Exception as e:
+            return f"❌ Failed to get nonce: {e}"
+        
+        # SIMPLE APPROACH: Build transaction with minimal parameters
+        print(f"🔧 Using simple transaction building approach")
+        
+        # Get the function data
+        data = function_call._encode_transaction_data()
+        
+        # Build a simple transaction with actual nonce and chainId for EIP-155 compliance
+        transaction = {
+            'from': address,
+            'to': CONTRACT_ADDRESS,
+            'gas': int(gas_limit),
+            'gasPrice': int(gas_price),
+            'nonce': nonce,  # Use actual account nonce
+            'data': data,
+            'value': 0,
+            'chainId': 480  # Worldcoin mainnet chain ID for EIP-155 compliance
+        }
+        
+        print(f"🔍 Debug: Simple transaction built: {transaction}")
+        
+        # Sign and send transaction with retry mechanism
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                print(f"🔧 Attempt {attempt + 1}/{max_retries} with nonce {nonce}")
+                
+                # Try with current nonce
+                test_transaction = transaction.copy()
+                test_transaction['nonce'] = nonce
+                
+                signed_txn = w3.eth.account.sign_transaction(test_transaction, PRIVATE_KEY)
+                tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+                print(f"✅ Transaction sent successfully: {tx_hash.hex()}")
+                break
+                
+            except Exception as e:
+                error_str = str(e)
+                print(f"❌ Attempt {attempt + 1} failed: {error_str}")
+                
+                if "nonce too low" in error_str.lower():
+                    # Try with next nonce
+                    nonce += 1
+                    print(f"🔧 Retrying with nonce {nonce}")
+                elif "rlp" in error_str.lower():
+                    # RLP error - try with nonce 0
+                    nonce = 0
+                    print(f"🔧 RLP error detected, trying with nonce 0")
+                elif attempt == max_retries - 1:
+                    # Last attempt failed
+                    return f"❌ Failed to send transaction after {max_retries} attempts: {e}\n🔍 Final transaction details: {test_transaction}"
+                else:
+                    # Other error - wait and retry
+                    import time
+                    time.sleep(1)
+                    continue
+        
+        # Wait for transaction receipt
+        receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+        
+        if receipt.status == 1:
+            return f"✅ Transaction successful!\n🔗 TX Hash: {tx_hash.hex()}\n📊 Gas Used: {receipt.gasUsed}\n💰 Gas Price: {receipt.effectiveGasPrice} wei\n✅ Answer marked as {'VALID' if is_valid else 'INVALID'}"
+        else:
+            return f"❌ Transaction failed!\n🔗 TX Hash: {tx_hash.hex()}\n📊 Gas Used: {receipt.gasUsed}"
+            
+    except Exception as e:
+        return f"❌ Transaction error: {e}"
+
 async def validate_unanswered_questions(ctx) -> str:
     """Validate unanswered questions by checking for answers that need validation."""
     try:
@@ -114,7 +326,24 @@ async def validate_unanswered_questions(ctx) -> str:
         
         # Send audio to voice-to-text agent
         transcription_result = await send_audio_to_voice_agent(ctx, audio_hash)
+        # Clean up transcription_result to extract just the text (remove emoji and prefix)
+        transcription_result_clean = transcription_result
+        if transcription_result.startswith("✅ Transcription: "):
+            transcription_result_clean = transcription_result.replace("✅ Transcription: ", "").strip()
+        elif transcription_result.startswith("❌"):
+            transcription_result_clean = ""
+        llm_valid, llm_reason = await validate_transcription_with_llm(question_prompt, transcription_result_clean)
         
+        # Format the LLM validation result with better styling
+        if llm_valid:
+            llm_result_text = f"""
+🤖 **AI Validation Result:**
+✅ **Valid Answer** - {llm_reason}"""
+        else:
+            llm_result_text = f"""
+🤖 **AI Validation Result:**
+❌ **Invalid Answer** - {llm_reason}"""
+
         result_text = f"""✅ **Validation Request for Unanswered Question**
 
 📋 **Question Details:**
@@ -131,14 +360,197 @@ async def validate_unanswered_questions(ctx) -> str:
 
 🎵 **Audio Transcription:**
 {transcription_result}
+{llm_result_text}"""
+        
+        # Submit transaction to blockchain
+        transaction_result = await validate_answer_transaction(question_id, answer_index, llm_valid)
+        
+        result_text += f"""
 
-💡 **Next Steps:**
-Use the contract's validateAnswer function to mark this answer as valid or invalid."""
+🔗 **Blockchain Transaction:**
+{transaction_result}"""
         
         return result_text
         
     except Exception as e:
         return f"❌ Error in validation process: {e}"
+
+async def validate_specific_answer(ctx, question_id: int, answer_index: int) -> str:
+    """Validate a specific answer by question ID and answer index."""
+    try:
+        # Get question details
+        question_result = contract.functions.getQuestion(question_id).call()
+        question_prompt = question_result[2]  # prompt is at index 2
+        answers_needed = question_result[3]   # answers needed
+        valid_answers = question_result[5]    # current valid answers
+        total_answers = question_result[6]    # total answers
+        
+        # Get all answers for this question
+        all_answers = contract.functions.getQuestionAnswers(question_id).call()
+        
+        if answer_index >= len(all_answers):
+            return f"❌ Answer index {answer_index} not found. Question {question_id} has {len(all_answers)} answers."
+        
+        # Get the specific answer
+        answer = all_answers[answer_index]
+        provider = answer[0]
+        audio_hash = answer[1]
+        status = answer[2]
+        submitted_at = answer[3]
+        
+        # Check if answer is already validated
+        status_map = {0: "Pending", 1: "Valid", 2: "Invalid"}
+        status_text = status_map.get(status, "Unknown")
+        
+        # Send audio to voice-to-text agent
+        transcription_result = await send_audio_to_voice_agent(ctx, audio_hash)
+        
+        # Clean up transcription_result to extract just the text
+        transcription_result_clean = transcription_result
+        if transcription_result.startswith("✅ Transcription: "):
+            transcription_result_clean = transcription_result.replace("✅ Transcription: ", "").strip()
+        elif transcription_result.startswith("❌"):
+            transcription_result_clean = ""
+        
+        llm_valid, llm_reason = await validate_transcription_with_llm(question_prompt, transcription_result_clean)
+        
+        # Format the LLM validation result with better styling
+        if llm_valid:
+            llm_result_text = f"""
+🤖 **AI Validation Result:**
+✅ **Valid Answer** - {llm_reason}"""
+        else:
+            llm_result_text = f"""
+🤖 **AI Validation Result:**
+❌ **Invalid Answer** - {llm_reason}"""
+
+        result_text = f"""✅ **Validation Request for Specific Answer**
+
+📋 **Question Details:**
+❓ Question ID: {question_id}
+❓ Prompt: "{question_prompt}"
+📊 Progress: {valid_answers}/{answers_needed} valid answers needed
+📝 Total Answers: {total_answers}
+
+📝 **Answer to Validate:**
+👤 Provider: {provider}
+🎵 Audio Hash (Blob ID): {audio_hash}
+📊 Answer Index: {answer_index}
+📊 Current Status: {status_text}
+🕐 Submitted: {submitted_at}
+
+🎵 **Audio Transcription:**
+{transcription_result}
+{llm_result_text}"""
+        
+        return result_text
+        
+    except Exception as e:
+        return f"❌ Error in validation process: {e}"
+
+async def summarize_valid_answers(ctx, question_id: int) -> str:
+    """Summarize all valid answers for a specific question using GPT-4o."""
+    try:
+        # Get question details
+        question_result = contract.functions.getQuestion(question_id).call()
+        question_prompt = question_result[2]  # prompt is at index 2
+        answers_needed = question_result[3]   # answers needed
+        valid_answers = question_result[5]    # current valid answers
+        total_answers = question_result[6]    # total answers
+        
+        # Get all answers for this question
+        all_answers = contract.functions.getQuestionAnswers(question_id).call()
+        
+        # Filter for valid answers (status = 1)
+        valid_answer_indices = []
+        for i, answer in enumerate(all_answers):
+            if answer[2] == 1:  # status is Valid
+                valid_answer_indices.append(i)
+        
+        if not valid_answer_indices:
+            return f"❌ No valid answers found for question {question_id}"
+        
+        # Transcribe all valid answers
+        transcriptions = []
+        for answer_index in valid_answer_indices:
+            answer = all_answers[answer_index]
+            audio_hash = answer[1]
+            provider = answer[0]
+            
+            # Send audio to voice-to-text agent
+            transcription_result = await send_audio_to_voice_agent(ctx, audio_hash)
+            
+            # Clean up transcription_result
+            transcription_clean = transcription_result
+            if transcription_result.startswith("✅ Transcription: "):
+                transcription_clean = transcription_result.replace("✅ Transcription: ", "").strip()
+            elif transcription_result.startswith("❌"):
+                transcription_clean = "Transcription failed"
+            
+            transcriptions.append(f"Answer {answer_index} (Provider: {provider}): {transcription_clean}")
+        
+        # Use GPT-4o to create a summary
+        summary = await create_summary_with_gpt4o(question_prompt, transcriptions)
+        
+        result_text = f"""📊 **Summary of Valid Answers for Question {question_id}**
+
+❓ **Question:** "{question_prompt}"
+📊 **Valid Answers:** {len(valid_answer_indices)}/{answers_needed} needed
+📝 **Total Answers:** {total_answers}
+
+🎵 **Individual Transcriptions:**
+{chr(10).join(transcriptions)}
+
+🤖 **AI Summary:**
+{summary}"""
+        
+        return result_text
+        
+    except Exception as e:
+        return f"❌ Error in summarization process: {e}"
+
+
+async def create_summary_with_gpt4o(question: str, transcriptions: list) -> str:
+    """Create a summary of transcriptions using GPT-4o."""
+    try:
+        import openai
+        
+        # Get OpenAI API key from environment
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            return "OpenAI API key not found in environment variables"
+        
+        client = openai.AsyncOpenAI(api_key=api_key)
+        
+        # Format transcriptions for the prompt
+        transcriptions_text = "\n".join([f"{i+1}. {trans}" for i, trans in enumerate(transcriptions)])
+        
+        prompt = f"""You are an AI assistant tasked with summarizing multiple audio transcriptions that answer the same question.
+
+Question: "{question}"
+
+Transcriptions:
+{transcriptions_text}
+
+Please create a comprehensive summary that:
+1. Identifies the main themes and common points across all answers
+2. Highlights any unique or different perspectives
+3. Provides a clear, organized summary of the collective wisdom
+4. Keeps the summary concise but informative (max 200 words)
+
+Your summary:"""
+
+        response = await client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=300,
+            temperature=0.3
+        )
+        
+        return response.choices[0].message.content.strip()
+        
+    except Exception as e:
+        return f"Error creating summary: {e}"
 
 # Initialize Web3
 w3 = Web3(Web3.HTTPProvider(WORLDCOIN_MAINNET_RPC))
@@ -277,8 +689,24 @@ async def handle_blockchain_request(ctx, function_name: str, *args) -> str:
     elif function_name.lower() in ["help", "functions", "list"]:
         return get_available_functions()
     
-    elif function_name.lower() == "validate":
-        return await validate_unanswered_questions(ctx)
+    elif function_name.lower().startswith("validate "):
+        parts = function_name.lower().split()
+        if len(parts) == 2 and parts[1] == "next":
+            return await validate_unanswered_questions(ctx)
+        elif len(parts) == 3 and parts[1].isdigit() and parts[2].isdigit():
+            question_id = int(parts[1])
+            answer_index = int(parts[2])
+            return await validate_specific_answer(ctx, question_id, answer_index)
+        else:
+            return "❌ Invalid validate command. Use 'validate next' or 'validate <question_id> <answer_index>'"
+    
+    elif function_name.lower().startswith("summarize valid "):
+        parts = function_name.lower().split()
+        if len(parts) == 3 and parts[1] == "valid" and parts[2].isdigit():
+            question_id = int(parts[2])
+            return await summarize_valid_answers(ctx, question_id)
+        else:
+            return "❌ Invalid summarize command. Use 'summarize valid <question_id>'"
     
     else:
         return await read_function(function_name, *args) 
