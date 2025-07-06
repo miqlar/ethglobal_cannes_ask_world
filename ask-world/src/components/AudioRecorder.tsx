@@ -15,7 +15,6 @@ const CONTRACT_ADDRESS = "0x185591a5DC4B65B8B7AF5befca02C702F23C476C";
 
 export default function AudioRecorder() {
     const [isRecording, setIsRecording] = useState(false);
-    const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
     const [uploading, setUploading] = useState(false);
     const [uploadStatus, setUploadStatus] = useState<string>('');
     const [showToast, setShowToast] = useState(false);
@@ -166,7 +165,13 @@ export default function AudioRecorder() {
 
             mediaRecorderRef.current.onstop = () => {
                 const audioBlob = new Blob(audioChunksRef.current, { type: mimeType || 'audio/webm' });
-                setAudioBlob(audioBlob);
+
+                // Save the recording for the current question
+                setQuestionRecordings(prev => ({
+                    ...prev,
+                    [currentCardIndex]: audioBlob
+                }));
+
                 stream.getTracks().forEach((track) => track.stop());
             };
 
@@ -185,14 +190,6 @@ export default function AudioRecorder() {
             setIsRecording(false);
             setRecordingStartTime(null);
             setRecordingDuration(0);
-
-            // Save the recording for the current question
-            if (audioBlob) {
-                setQuestionRecordings(prev => ({
-                    ...prev,
-                    [currentCardIndex]: audioBlob
-                }));
-            }
         }
     };
 
@@ -305,6 +302,8 @@ export default function AudioRecorder() {
                 ],
             });
             setUploadStatus('Transaction sent to World Chain!');
+            setToastType('success');
+            setShowToast(true);
 
             // Clear the recording for the current question after successful upload
             setQuestionRecordings(prev => {
@@ -345,7 +344,6 @@ export default function AudioRecorder() {
                 setBlobId(result.blobId);
                 setToastType('success');
                 setShowToast(true);
-                setAudioBlob(null);
                 // Call the transaction function
                 handleAfterUpload(result.blobId);
             } else {
@@ -587,7 +585,10 @@ export default function AudioRecorder() {
                 )}
 
                 {uploadStatus && (
-                    <p className={`mb-4 text-center text-base font-medium ${uploadStatus.startsWith('Upload successful') ? 'text-green-600' : 'text-red-600'}`}>{uploadStatus}</p>
+                    <p className={`mb-4 text-center text-base font-medium ${uploadStatus.startsWith('Upload successful') || uploadStatus.startsWith('Uploading to Walrus') || uploadStatus.startsWith('Transaction sent to World Chain')
+                        ? 'text-green-600'
+                        : 'text-red-600'
+                        }`}>{uploadStatus}</p>
                 )}
 
                 {questionRecordings[currentCardIndex] && !isRecording && (
