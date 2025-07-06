@@ -14,7 +14,7 @@ Users submit audio answers to questions, which are automatically stored on Walru
 
 | Network | Address | Verified |
 | --------------- | --------------- | --- |
-| WorldChain Mainnet | [0x5549A2E7a5b6eE6B556C0EE5eF5256B7c4eD46D6](https://worldscan.org/address/0x5549a2e7a5b6ee6b556c0ee5ef5256b7c4ed46d6) | :white_check_mark: |
+| WorldChain Mainnet | [0xbDBcB9d5f5cF6c6040A7b6151c2ABE25C68f83af](https://worldscan.org/address/0xbDBcB9d5f5cF6c6040A7b6151c2ABE25C68f83af) | :white_check_mark: |
 
 ## Repository Structure
 

@@ -11,7 +11,7 @@ WALRUS_AGENT_ADDRESS = os.getenv("WALRUS_AGENT_ADDRESS", "agent1qfxa0vgsvwcp43yk
 VOICE_TO_TEXT_AGENT_ADDRESS = os.getenv("VOICE_TO_TEXT_AGENT_ADDRESS", "agent1qvtysj7nswtfa9qun9sjwk39gdnmu3hrc9u2hc66ze374zzmazgtzq05y6z")
 
 # Contract configuration
-CONTRACT_ADDRESS = "0x5549A2E7a5b6eE6B556C0EE5eF5256B7c4eD46D6"
+CONTRACT_ADDRESS = "0xbDBcB9d5f5cF6c6040A7b6151c2ABE25C68f83af"
 WORLDCOIN_MAINNET_RPC = "https://worldchain-mainnet.g.alchemy.com/public"
 
 # Agent configuration

@@ -96,6 +96,14 @@ contract AskWorld is Ownable, ReentrancyGuard {
         uint256 amount
     );
 
+    event AnswerProviderChanged(
+        uint256 indexed answerId,
+        uint256 indexed questionId,
+        address indexed oldProvider,
+        address newProvider,
+        address changer
+    );
+
     // Modifiers
     modifier onlyAIValidator() {
         require(msg.sender == owner() || isAIValidator(msg.sender), "Not authorized");
@@ -106,8 +114,6 @@ contract AskWorld is Ownable, ReentrancyGuard {
         require(questions[questionId].exists, "Question does not exist");
         _;
     }
-
-
 
     modifier questionOpen(uint256 questionId) {
         require(questions[questionId].status == QuestionStatus.OPEN, "Question not open");
@@ -244,18 +250,44 @@ contract AskWorld is Ownable, ReentrancyGuard {
      * @param answerIndex Index of the answer to overwrite
      * @param newStatus New status for the answer (0=PENDING, 1=APPROVED, 2=REJECTED, 3=PROCESSING)
      * @param newBlobId New blob ID (optional, empty string to keep existing)
+     * @param newProvider New provider address (optional, zero address to keep existing)
      */
     function owner_overwriteAnswerState(
         uint256 questionId,
         uint256 answerIndex,
         uint8 newStatus,
-        string memory newBlobId
+        string memory newBlobId,
+        address newProvider
     ) external onlyOwner questionExists(questionId) {
         require(answerIndex < questionAnswers[questionId].length, "Answer does not exist");
         require(newStatus <= 3, "Invalid status (0=PENDING, 1=APPROVED, 2=REJECTED, 3=PROCESSING)");
         
         Answer storage answer = questionAnswers[questionId][answerIndex];
         AnswerStatus oldStatus = answer.status;
+        address oldProvider = answer.provider;
+        
+        // Update provider if provided (not zero address)
+        if (newProvider != address(0) && newProvider != oldProvider) {
+            // Remove the answer from the old provider's mapping
+            uint256[] storage oldProviderAnswers = userAnswers[oldProvider][questionId];
+            for (uint256 i = 0; i < oldProviderAnswers.length; i++) {
+                if (oldProviderAnswers[i] == answerIndex) {
+                    // Remove this answer index from the old provider's list
+                    oldProviderAnswers[i] = oldProviderAnswers[oldProviderAnswers.length - 1];
+                    oldProviderAnswers.pop();
+                    break;
+                }
+            }
+            
+            // Add the answer to the new provider's mapping
+            userAnswers[newProvider][questionId].push(answerIndex);
+            
+            // Update the answer's provider
+            answer.provider = newProvider;
+            
+            // Emit provider change event
+            emit AnswerProviderChanged(answerIndex, questionId, oldProvider, newProvider, msg.sender);
+        }
         
         // Update blob ID if provided
         if (bytes(newBlobId).length > 0) {
@@ -643,9 +675,10 @@ contract AskWorld is Ownable, ReentrancyGuard {
                 
                 // Default: UNANSWERED
                 uint8 status = uint8(AnswerStatus.UNANSWERED);
-                for (uint256 j = 0; j < questionAnswers[i].length; j++) {
-                    if (questionAnswers[i][j].provider == user) {
-                        status = uint8(questionAnswers[i][j].status);
+                // Find the last answer from this user (most recent)
+                for (uint256 j = questionAnswers[i].length; j > 0; j--) {
+                    if (questionAnswers[i][j - 1].provider == user) {
+                        status = uint8(questionAnswers[i][j - 1].status);
                         break;
                     }
                 }

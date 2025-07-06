@@ -21,7 +21,7 @@ try:
     from config import CONTRACT_ADDRESS, WORLDCOIN_MAINNET_RPC, WALRUS_AGENT_ADDRESS
 except ImportError:
     # Fallback values if config import fails
-    CONTRACT_ADDRESS = "0x5549a2e7a5b6ee6b556c0ee5ef5256b7c4ed46d6"
+    CONTRACT_ADDRESS = "0xbDBcB9d5f5cF6c6040A7b6151c2ABE25C68f83af"
     WORLDCOIN_MAINNET_RPC = "https://worldchain-mainnet.g.alchemy.com/public"
     WALRUS_AGENT_ADDRESS = "agent1qfxa0vgsvwcp43ykgnysqp5aj2kc90xnxrhphl2jnc34p0p7hkej2srxnsq"
 
