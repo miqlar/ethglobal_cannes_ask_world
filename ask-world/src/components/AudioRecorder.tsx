@@ -6,6 +6,7 @@ import { RequestPermissionPayload } from '@worldcoin/minikit-js';
 import { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
 import CONTRACT_ABI from "../../abi/askworld.json";
+import Confetti from './Confetti';
 
 function isSafari() {
     return /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
@@ -36,6 +37,7 @@ export default function AudioRecorder() {
     const [transactionId, setTransactionId] = useState<string | null>(null);
     const [transactionPending, setTransactionPending] = useState(false);
     const [questionRecordings, setQuestionRecordings] = useState<Record<number, Blob>>({});
+    const [showConfetti, setShowConfetti] = useState(false);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
 
@@ -125,6 +127,15 @@ export default function AudioRecorder() {
     useEffect(() => {
         fetchQuestionsFromContract();
     }, []);
+
+    // Show confetti when an approved answer is displayed
+    useEffect(() => {
+        if (questions.length > 0 && questions[currentCardIndex]?.answerStatus === 2) {
+            setShowConfetti(true);
+            const timer = setTimeout(() => setShowConfetti(false), 16000);
+            return () => clearTimeout(timer);
+        }
+    }, [currentCardIndex, questions]);
 
     // Track recording duration
     useEffect(() => {
@@ -599,186 +610,187 @@ export default function AudioRecorder() {
 
     // Swipable cards UI
     return (
-        <div
-            className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 via-purple-500 to-indigo-500 py-8 px-2"
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
-        >
-            {/* Left Arrow */}
-            {!isRecording && (
-                <button
-                    onClick={() => {
-                        if (currentCardIndex > 0) {
-                            setCurrentCardIndex(currentCardIndex - 1);
-                        }
-                    }}
-                    disabled={currentCardIndex === 0}
-                    className="absolute left-4 top-1/2 transform -translate-y-1/2 w-12 h-12 bg-white/80 rounded-full flex items-center justify-center shadow-lg hover:bg-white transition-all disabled:opacity-50 disabled:cursor-not-allowed z-10"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6 text-gray-700">
-                        <path d="M15 18l-6-6 6-6" />
-                    </svg>
-                </button>
-            )}
-
-            {/* Right Arrow */}
-            {!isRecording && (
-                <button
-                    onClick={() => {
-                        if (currentCardIndex < questions.length - 1) {
-                            setCurrentCardIndex(currentCardIndex + 1);
-                        }
-                    }}
-                    disabled={currentCardIndex === questions.length - 1}
-                    className="absolute right-4 top-1/2 transform -translate-y-1/2 w-12 h-12 bg-white/80 rounded-full flex items-center justify-center shadow-lg hover:bg-white transition-all disabled:opacity-50 disabled:cursor-not-allowed z-10"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6 text-gray-700">
-                        <path d="M9 18l6-6-6-6" />
-                    </svg>
-                </button>
-            )}
-
-            <div className="w-full max-w-md bg-white/90 rounded-3xl shadow-2xl p-8 flex flex-col items-center animate-fade-in">
-                {/* Question display */}
-                <div className="flex flex-col items-center mb-6 w-full">
-                    <div className={`w-full rounded-xl p-6 shadow-sm mb-4 ${questions[currentCardIndex].answerStatus === 0 ? 'bg-gray-100' :
-                        questions[currentCardIndex].answerStatus === 1 ? 'bg-yellow-100' :
-                            questions[currentCardIndex].answerStatus === 2 ? 'bg-green-100' :
-                                'bg-red-100'
-                        }`}>
-                        <h2 className="text-2xl font-bold text-gray-900 text-center leading-tight">
-                            {questions[currentCardIndex].text}
-                        </h2>
-                        {questions[currentCardIndex].answerStatus === 1 && (
-                            <div className="flex items-center justify-center mt-2">
-                                <span className="text-yellow-700 font-medium">⏳ Pending AI Validation</span>
-                            </div>
-                        )}
-                        {questions[currentCardIndex].answerStatus === 2 && (
-                            <div className="flex items-center justify-center mt-2">
-                                <span className="text-green-700 font-medium">🎉 Approved!</span>
-                            </div>
-                        )}
-                        {questions[currentCardIndex].answerStatus === 3 && (
-                            <div className="flex items-center justify-center mt-2">
-                                <span className="text-red-700 font-medium">😔 Rejected</span>
-                            </div>
-                        )}
-                    </div>
-                    <div className="flex items-center gap-2 mb-4">
-                        <span className="text-sm text-gray-500">
-                            Question {currentCardIndex + 1} of {questions.length}
-                        </span>
-                    </div>
-                    <div className="flex items-center gap-2 mb-4">
-                        <span className="text-lg font-semibold text-green-600">
-                            💰 {questions[currentCardIndex].reward} USDC Reward
-                        </span>
-                    </div>
-                </div>
-
-                {/* Big round Start Recording button or Stop button - only for unanswered questions */}
-                {questions[currentCardIndex].answerStatus === 0 && (
-                    <div className="flex flex-col items-center w-full mb-6">
-                        {!isRecording ? (
-                            <button
-                                onClick={startRecording}
-                                disabled={uploading}
-                                className="start-recording-btn mb-2 animate-pop"
-                            >
-                            </button>
-                        ) : (
-                            <>
-                                <div className="flex flex-col items-center mb-4">
-                                    <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
-                                        <div
-                                            className="bg-red-500 h-2 rounded-full transition-all duration-100"
-                                            style={{ width: `${Math.min((recordingDuration / 60) * 100, 100)}%` }}
-                                        ></div>
-                                    </div>
-                                    <span className="text-red-500 font-medium text-sm">
-                                        Recording: {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
-                                    </span>
-                                </div>
-                                <button
-                                    onClick={stopRecording}
-                                    disabled={uploading}
-                                    className="stop-recording-btn mb-2 animate-pop"
-                                >
-                                </button>
-                            </>
-                        )}
-                    </div>
-                )}
-
-                {questions[currentCardIndex].answerStatus === 0 && questionRecordings[currentCardIndex] && !isRecording && (
-                    <div className="mb-6 w-full">
-                        <audio controls src={URL.createObjectURL(questionRecordings[currentCardIndex])} className="w-full rounded-lg border border-gray-200 shadow-sm" />
-                    </div>
-                )}
-
-                {uploadStatus && (
-                    <p className={`mb-4 text-center text-base font-medium ${uploadStatus.startsWith('Upload successful') || uploadStatus.startsWith('Uploading to Walrus') || uploadStatus.startsWith('Transaction sent to World Chain')
-                        ? 'text-green-600'
-                        : 'text-red-600'
-                        }`}>{uploadStatus}</p>
-                )}
-
-                {questions[currentCardIndex].answerStatus === 0 && questionRecordings[currentCardIndex] && !isRecording && (
+        <>
+            <Confetti isActive={showConfetti} />
+            <div
+                className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 via-purple-500 to-indigo-500 py-8 px-2"
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+            >
+                {/* Left Arrow */}
+                {!isRecording && (
                     <button
-                        onClick={handleUpload}
-                        disabled={!questionRecordings[currentCardIndex] || uploading}
-                        className="transition-all flex items-center gap-2 px-6 py-2.5 rounded-full font-semibold shadow-md bg-gradient-to-r from-green-500 to-blue-500 text-white hover:from-green-600 hover:to-blue-600 focus:outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50 mb-4"
+                        onClick={() => {
+                            if (currentCardIndex > 0) {
+                                setCurrentCardIndex(currentCardIndex - 1);
+                            }
+                        }}
+                        disabled={currentCardIndex === 0}
+                        className="absolute left-4 top-1/2 transform -translate-y-1/2 w-12 h-12 bg-white/80 rounded-full flex items-center justify-center shadow-lg hover:bg-white transition-all disabled:opacity-50 disabled:cursor-not-allowed z-10"
                     >
-                        {uploading ? 'Submitting...' : 'Submit'}
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6 text-gray-700">
+                            <path d="M15 18l-6-6 6-6" />
+                        </svg>
                     </button>
                 )}
 
-                {/* Navigation buttons */}
+                {/* Right Arrow */}
                 {!isRecording && (
-                    <div className="flex gap-4 w-full">
+                    <button
+                        onClick={() => {
+                            if (currentCardIndex < questions.length - 1) {
+                                setCurrentCardIndex(currentCardIndex + 1);
+                            }
+                        }}
+                        disabled={currentCardIndex === questions.length - 1}
+                        className="absolute right-4 top-1/2 transform -translate-y-1/2 w-12 h-12 bg-white/80 rounded-full flex items-center justify-center shadow-lg hover:bg-white transition-all disabled:opacity-50 disabled:cursor-not-allowed z-10"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6 text-gray-700">
+                            <path d="M9 18l6-6-6-6" />
+                        </svg>
+                    </button>
+                )}
+
+                <div className={`w-full max-w-md rounded-3xl shadow-2xl p-8 flex flex-col items-center animate-fade-in ${questions[currentCardIndex].answerStatus === 0 ? 'bg-white/90' :
+                    questions[currentCardIndex].answerStatus === 1 ? 'bg-yellow-200/95' :
+                        questions[currentCardIndex].answerStatus === 2 ? 'bg-green-200/95' :
+                            'bg-red-200/95'
+                    }`}>
+                    {/* Question display */}
+                    <div className="flex flex-col items-center mb-6 w-full">
+                        <div className="w-full rounded-xl p-6 shadow-sm mb-4 bg-white/80">
+                            <h2 className="text-2xl font-bold text-gray-900 text-center leading-tight">
+                                {questions[currentCardIndex].text}
+                            </h2>
+                            {questions[currentCardIndex].answerStatus === 1 && (
+                                <div className="flex items-center justify-center mt-2">
+                                    <span className="text-yellow-800 font-medium text-lg">⏳ Answer Validated - Pending AI Validation</span>
+                                </div>
+                            )}
+                            {questions[currentCardIndex].answerStatus === 2 && (
+                                <div className="flex items-center justify-center mt-2">
+                                    <span className="text-green-800 font-medium text-xl animate-bounce">🎉 Answer Validated - Approved!</span>
+                                </div>
+                            )}
+                            {questions[currentCardIndex].answerStatus === 3 && (
+                                <div className="flex items-center justify-center mt-2">
+                                    <span className="text-red-800 font-medium text-lg">😔 Answer Validated - Rejected</span>
+                                </div>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-2 mb-4">
+                            <span className="text-sm text-gray-600">
+                                Question {currentCardIndex + 1} of {questions.length}
+                            </span>
+                        </div>
+                        <div className="flex items-center gap-2 mb-4">
+                            {questions[currentCardIndex].answerStatus === 2 ? (
+                                <span className="text-lg font-semibold text-green-800">
+                                    💰 {(questions[currentCardIndex].reward * 100000).toFixed(2)} USDC Reward Received
+                                </span>
+                            ) : (
+                                <span className="text-lg font-semibold text-green-600">
+                                    💰 {(questions[currentCardIndex].reward * 100000).toFixed(2)} USDC Reward
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Big round Start Recording button or Stop button - only for unanswered questions */}
+                    {questions[currentCardIndex].answerStatus === 0 && (
+                        <div className="flex flex-col items-center w-full mb-6">
+                            {!isRecording ? (
+                                <button
+                                    onClick={startRecording}
+                                    disabled={uploading}
+                                    className="start-recording-btn mb-2 animate-pop"
+                                >
+                                </button>
+                            ) : (
+                                <>
+                                    <div className="flex flex-col items-center mb-4">
+                                        <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                                            <div
+                                                className="bg-red-500 h-2 rounded-full transition-all duration-100"
+                                                style={{ width: `${Math.min((recordingDuration / 60) * 100, 100)}%` }}
+                                            ></div>
+                                        </div>
+                                        <span className="text-red-500 font-medium text-sm">
+                                            Recording: {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
+                                        </span>
+                                    </div>
+                                    <button
+                                        onClick={stopRecording}
+                                        disabled={uploading}
+                                        className="stop-recording-btn mb-2 animate-pop"
+                                    >
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                    )}
+
+                    {questions[currentCardIndex].answerStatus === 0 && questionRecordings[currentCardIndex] && !isRecording && (
+                        <div className="mb-6 w-full">
+                            <audio controls src={URL.createObjectURL(questionRecordings[currentCardIndex])} className="w-full rounded-lg border border-gray-200 shadow-sm" />
+                        </div>
+                    )}
+
+                    {uploadStatus && (
+                        <p className={`mb-4 text-center text-base font-medium ${uploadStatus.startsWith('Upload successful') || uploadStatus.startsWith('Uploading to Walrus') || uploadStatus.startsWith('Transaction sent to World Chain')
+                            ? 'text-green-600'
+                            : 'text-red-600'
+                            }`}>{uploadStatus}</p>
+                    )}
+
+                    {questions[currentCardIndex].answerStatus === 0 && questionRecordings[currentCardIndex] && !isRecording && (
                         <button
-                            onClick={() => setShowRecorder(false)}
-                            className="w-[10%] min-w-[2.5rem] aspect-square flex items-center justify-center rounded-full shadow-md bg-white text-purple-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-400"
-                            aria-label="Home"
+                            onClick={handleUpload}
+                            disabled={!questionRecordings[currentCardIndex] || uploading}
+                            className="transition-all flex items-center gap-2 px-6 py-2.5 rounded-full font-semibold shadow-md bg-gradient-to-r from-green-500 to-blue-500 text-white hover:from-green-600 hover:to-blue-600 focus:outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50 mb-4"
                         >
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
-                                <path d="M3 12l9-9 9 9" />
-                                <path d="M4 10v10a1 1 0 001 1h5m4 0h5a1 1 0 001-1V10" />
-                            </svg>
+                            {uploading ? 'Submitting...' : 'Submit'}
                         </button>
-                    </div>
-                )}
+                    )}
 
-                {/* Swipe instructions */}
-                {!isRecording && (
-                    <p className="text-xs text-gray-500 mt-4 text-center">
-                        Swipe left/right to navigate between questions
-                    </p>
-                )}
+                    {/* Navigation buttons */}
+                    {!isRecording && (
+                        <div className="flex justify-center w-full">
+                            <button
+                                onClick={() => setShowRecorder(false)}
+                                className="w-12 h-12 flex items-center justify-center rounded-full shadow-md bg-white text-purple-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                                aria-label="Home"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
+                                    <path d="M3 12l9-9 9 9" />
+                                    <path d="M4 10v10a1 1 0 001 1h5m4 0h5a1 1 0 001-1V10" />
+                                </svg>
+                            </button>
+                        </div>
+                    )}
 
-                {/* Toast for upload result */}
-                {showToast && (
-                    <div className={`fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 px-6 py-4 rounded-xl shadow-lg flex items-center gap-3 ${toastType === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'} animate-fade-in`}>
-                        {toastType === 'success' ? (
-                            <>
-                                <span role="img" aria-label="success">✅</span>
-                                <span>Upload successful!</span>
-                                {blobId && (
-                                    <button onClick={copyBlobId} className="ml-2 px-2 py-1 bg-white/20 rounded text-xs hover:bg-white/30 transition-all">Copy Blob ID</button>
-                                )}
-                            </>
-                        ) : (
-                            <>
-                                <span role="img" aria-label="error">❌</span>
-                                <span>Upload failed</span>
-                            </>
-                        )}
-                    </div>
-                )}
-            </div>
-            <style jsx global>{`
+                    {/* Toast for upload result */}
+                    {showToast && (
+                        <div className={`fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 px-6 py-4 rounded-xl shadow-lg flex items-center gap-3 ${toastType === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'} animate-fade-in`}>
+                            {toastType === 'success' ? (
+                                <>
+                                    <span role="img" aria-label="success">✅</span>
+                                    <span>Upload successful!</span>
+                                    {blobId && (
+                                        <button onClick={copyBlobId} className="ml-2 px-2 py-1 bg-white/20 rounded text-xs hover:bg-white/30 transition-all">Copy Blob ID</button>
+                                    )}
+                                </>
+                            ) : (
+                                <>
+                                    <span role="img" aria-label="error">❌</span>
+                                    <span>Upload failed</span>
+                                </>
+                            )}
+                        </div>
+                    )}
+                </div>
+                <style jsx global>{`
                 @keyframes fade-in {
                     0% { opacity: 0; transform: translateY(20px); }
                     100% { opacity: 1; transform: translateY(0); }
@@ -927,6 +939,7 @@ export default function AudioRecorder() {
                         inset 0 -2px 0 rgba(0, 0, 0, 0.4);
                 }
             `}</style>
-        </div>
+            </div>
+        </>
     );
 }
