@@ -483,34 +483,38 @@ export default function AudioRecorder() {
             onTouchEnd={handleTouchEnd}
         >
             {/* Left Arrow */}
-            <button
-                onClick={() => {
-                    if (currentCardIndex > 0) {
-                        setCurrentCardIndex(currentCardIndex - 1);
-                    }
-                }}
-                disabled={currentCardIndex === 0}
-                className="absolute left-4 top-1/2 transform -translate-y-1/2 w-12 h-12 bg-white/80 rounded-full flex items-center justify-center shadow-lg hover:bg-white transition-all disabled:opacity-50 disabled:cursor-not-allowed z-10"
-            >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6 text-gray-700">
-                    <path d="M15 18l-6-6 6-6" />
-                </svg>
-            </button>
+            {!isRecording && (
+                <button
+                    onClick={() => {
+                        if (currentCardIndex > 0) {
+                            setCurrentCardIndex(currentCardIndex - 1);
+                        }
+                    }}
+                    disabled={currentCardIndex === 0}
+                    className="absolute left-4 top-1/2 transform -translate-y-1/2 w-12 h-12 bg-white/80 rounded-full flex items-center justify-center shadow-lg hover:bg-white transition-all disabled:opacity-50 disabled:cursor-not-allowed z-10"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6 text-gray-700">
+                        <path d="M15 18l-6-6 6-6" />
+                    </svg>
+                </button>
+            )}
 
             {/* Right Arrow */}
-            <button
-                onClick={() => {
-                    if (currentCardIndex < questions.length - 1) {
-                        setCurrentCardIndex(currentCardIndex + 1);
-                    }
-                }}
-                disabled={currentCardIndex === questions.length - 1}
-                className="absolute right-4 top-1/2 transform -translate-y-1/2 w-12 h-12 bg-white/80 rounded-full flex items-center justify-center shadow-lg hover:bg-white transition-all disabled:opacity-50 disabled:cursor-not-allowed z-10"
-            >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6 text-gray-700">
-                    <path d="M9 18l6-6-6-6" />
-                </svg>
-            </button>
+            {!isRecording && (
+                <button
+                    onClick={() => {
+                        if (currentCardIndex < questions.length - 1) {
+                            setCurrentCardIndex(currentCardIndex + 1);
+                        }
+                    }}
+                    disabled={currentCardIndex === questions.length - 1}
+                    className="absolute right-4 top-1/2 transform -translate-y-1/2 w-12 h-12 bg-white/80 rounded-full flex items-center justify-center shadow-lg hover:bg-white transition-all disabled:opacity-50 disabled:cursor-not-allowed z-10"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6 text-gray-700">
+                        <path d="M9 18l6-6-6-6" />
+                    </svg>
+                </button>
+            )}
 
             <div className="w-full max-w-md bg-white/90 rounded-3xl shadow-2xl p-8 flex flex-col items-center animate-fade-in">
                 {/* Question display */}
