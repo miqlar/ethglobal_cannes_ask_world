@@ -32,6 +32,7 @@ ethglobal_cannes_ask_world/
 ├── img/                     # Project assets
 └── README.md                # Project documentation
 ```
+Front-end development was developed in a separated repo: https://github.com/fayedaihall/ethglobal until earlier today when it's transferred to here.
 
 ### Key Components
 
