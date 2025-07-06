@@ -8,11 +8,11 @@
 
 A decentralized Q&A platform where users can ask questions with bounties and receive audio answers. AskWorld leverages AI validation, blockchain storage, and multi-agent architecture to create a trustless system for knowledge sharing and monetization.
 
-Users submit audio answers to questions, which are automatically transcribed, validated by AI, and stored on the Worldcoin mainnet blockchain. Valid answers receive bounty payments, creating a sustainable ecosystem for knowledge exchange.
+Users submit audio answers to questions, which are automatically stored on Walrus (decentralized data storage), transcribed by voice agents, and validated by AI agents on Agentverse. The settlement layer for payments and platform management is handled by smart contracts deployed on WorldChain. Valid answers receive bounty payments, creating a sustainable ecosystem for knowledge exchange.
 
 ## Deployed Contracts
 
-| Network | Address | Explorer |
+| Network | Address | Verified |
 | --------------- | --------------- | --- |
 | WorldChain Mainnet | [0x5549A2E7a5b6eE6B556C0EE5eF5256B7c4eD46D6](https://worldscan.org/address/0x5549a2e7a5b6ee6b556c0ee5ef5256b7c4ed46d6) | :white_check_mark: |
 
