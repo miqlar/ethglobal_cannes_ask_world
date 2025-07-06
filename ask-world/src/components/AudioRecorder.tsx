@@ -36,6 +36,7 @@ export default function AudioRecorder() {
     const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null);
     const [transactionId, setTransactionId] = useState<string | null>(null);
     const [transactionPending, setTransactionPending] = useState(false);
+    const [questionRecordings, setQuestionRecordings] = useState<Record<number, Blob>>({});
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
 
@@ -184,6 +185,14 @@ export default function AudioRecorder() {
             setIsRecording(false);
             setRecordingStartTime(null);
             setRecordingDuration(0);
+
+            // Save the recording for the current question
+            if (audioBlob) {
+                setQuestionRecordings(prev => ({
+                    ...prev,
+                    [currentCardIndex]: audioBlob
+                }));
+            }
         }
     };
 
@@ -296,13 +305,21 @@ export default function AudioRecorder() {
                 ],
             });
             setUploadStatus('Transaction sent to World Chain!');
+
+            // Clear the recording for the current question after successful upload
+            setQuestionRecordings(prev => {
+                const newRecordings = { ...prev };
+                delete newRecordings[currentCardIndex];
+                return newRecordings;
+            });
         } catch (err) {
             setUploadStatus('Failed to send transaction: ' + (err as Error).message);
         }
     };
 
     const handleUpload = async () => {
-        if (!audioBlob) {
+        const currentRecording = questionRecordings[currentCardIndex];
+        if (!currentRecording) {
             setUploadStatus('No recording to upload.');
             return;
         }
@@ -314,7 +331,7 @@ export default function AudioRecorder() {
 
         try {
             const formData = new FormData();
-            formData.append('audio', audioBlob, `recording-${Date.now()}.webm`);
+            formData.append('audio', currentRecording, `recording-${Date.now()}.webm`);
 
             const response = await fetch('/api/upload-walrus', {
                 method: 'POST',
@@ -563,9 +580,9 @@ export default function AudioRecorder() {
                     )}
                 </div>
 
-                {audioBlob && !isRecording && (
+                {questionRecordings[currentCardIndex] && !isRecording && (
                     <div className="mb-6 w-full">
-                        <audio controls src={URL.createObjectURL(audioBlob)} className="w-full rounded-lg border border-gray-200 shadow-sm" />
+                        <audio controls src={URL.createObjectURL(questionRecordings[currentCardIndex])} className="w-full rounded-lg border border-gray-200 shadow-sm" />
                     </div>
                 )}
 
@@ -573,10 +590,10 @@ export default function AudioRecorder() {
                     <p className={`mb-4 text-center text-base font-medium ${uploadStatus.startsWith('Upload successful') ? 'text-green-600' : 'text-red-600'}`}>{uploadStatus}</p>
                 )}
 
-                {audioBlob && !isRecording && (
+                {questionRecordings[currentCardIndex] && !isRecording && (
                     <button
                         onClick={handleUpload}
-                        disabled={!audioBlob || uploading}
+                        disabled={!questionRecordings[currentCardIndex] || uploading}
                         className="transition-all flex items-center gap-2 px-6 py-2.5 rounded-full font-semibold shadow-md bg-gradient-to-r from-green-500 to-blue-500 text-white hover:from-green-600 hover:to-blue-600 focus:outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50 mb-4"
                     >
                         {uploading ? 'Submitting...' : 'Submit'}
