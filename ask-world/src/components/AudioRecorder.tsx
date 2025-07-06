@@ -63,13 +63,15 @@ export default function AudioRecorder() {
             if (result && typeof result === 'object' && 'questionIds' in result && 'answerStatus' in result) {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const questionIds = (result as any).questionIds as string[];
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const answerStatus = (result as any).answerStatus as string[];
 
-                // Fetch details for each question that hasn't been answered (status 0)
+                // Fetch details for each question
                 const questionsData = [];
                 for (let i = 0; i < questionIds.length; i++) {
                     const questionId = questionIds[i];
+                    const status = parseInt(answerStatus[i]);
 
-                    // Only include questions that haven't been answered (status 0 = not answered)
                     try {
                         const questionResult = await contract.methods.getQuestion(questionId).call();
 
@@ -78,6 +80,7 @@ export default function AudioRecorder() {
                                 id: parseInt(questionId),
                                 text: questionResult[2] as string, // prompt
                                 reward: parseFloat(questionResult[4] as string) / 1e6, // bounty
+                                answerStatus: status // 0=unanswered, 1=pending, 2=approved, 3=rejected
                             });
                         }
                     } catch (error) {
@@ -89,11 +92,11 @@ export default function AudioRecorder() {
             } else {
                 // Fallback to hardcoded questions if no questions found
                 const fallbackQuestions = [
-                    { id: 1, text: "What's your favorite way to spend a weekend?", reward: 50 },
-                    { id: 2, text: "If you could have dinner with anyone, who would it be?", reward: 75 },
-                    { id: 3, text: "What's the most valuable lesson you've learned?", reward: 100 },
-                    { id: 4, text: "What's your biggest dream for the future?", reward: 150 },
-                    { id: 5, text: "What makes you feel most alive?", reward: 200 },
+                    { id: 1, text: "What's your favorite way to spend a weekend?", reward: 50, answerStatus: 0 },
+                    { id: 2, text: "If you could have dinner with anyone, who would it be?", reward: 75, answerStatus: 0 },
+                    { id: 3, text: "What's the most valuable lesson you've learned?", reward: 100, answerStatus: 0 },
+                    { id: 4, text: "What's your biggest dream for the future?", reward: 150, answerStatus: 0 },
+                    { id: 5, text: "What makes you feel most alive?", reward: 200, answerStatus: 0 },
                 ];
                 setQuestions(fallbackQuestions);
             }
@@ -102,11 +105,11 @@ export default function AudioRecorder() {
             console.error('Error fetching questions from contract:', error);
             // Fallback to hardcoded questions on error
             const fallbackQuestions = [
-                { id: 1, text: "What's your favorite way to spend a weekend?", reward: 50 },
-                { id: 2, text: "If you could have dinner with anyone, who would it be?", reward: 75 },
-                { id: 3, text: "What's the most valuable lesson you've learned?", reward: 100 },
-                { id: 4, text: "What's your biggest dream for the future?", reward: 150 },
-                { id: 5, text: "What makes you feel most alive?", reward: 200 },
+                { id: 1, text: "What's your favorite way to spend a weekend?", reward: 50, answerStatus: 0 },
+                { id: 2, text: "If you could have dinner with anyone, who would it be?", reward: 75, answerStatus: 0 },
+                { id: 3, text: "What's the most valuable lesson you've learned?", reward: 100, answerStatus: 0 },
+                { id: 4, text: "What's your biggest dream for the future?", reward: 150, answerStatus: 0 },
+                { id: 5, text: "What makes you feel most alive?", reward: 200, answerStatus: 0 },
             ];
             setQuestions(fallbackQuestions);
         } finally {
@@ -115,7 +118,7 @@ export default function AudioRecorder() {
     };
 
     // Use state for questions so we can update the list
-    const [questions, setQuestions] = useState<Array<{ id: number, text: string, reward: number }>>([]);
+    const [questions, setQuestions] = useState<Array<{ id: number, text: string, reward: number, answerStatus: number }>>([]);
     const [loadingQuestions, setLoadingQuestions] = useState(true);
 
     // Load questions from contract on component mount
@@ -639,10 +642,29 @@ export default function AudioRecorder() {
             <div className="w-full max-w-md bg-white/90 rounded-3xl shadow-2xl p-8 flex flex-col items-center animate-fade-in">
                 {/* Question display */}
                 <div className="flex flex-col items-center mb-6 w-full">
-                    <div className="w-full bg-gray-100 rounded-xl p-6 shadow-sm mb-4">
+                    <div className={`w-full rounded-xl p-6 shadow-sm mb-4 ${questions[currentCardIndex].answerStatus === 0 ? 'bg-gray-100' :
+                        questions[currentCardIndex].answerStatus === 1 ? 'bg-yellow-100' :
+                            questions[currentCardIndex].answerStatus === 2 ? 'bg-green-100' :
+                                'bg-red-100'
+                        }`}>
                         <h2 className="text-2xl font-bold text-gray-900 text-center leading-tight">
                             {questions[currentCardIndex].text}
                         </h2>
+                        {questions[currentCardIndex].answerStatus === 1 && (
+                            <div className="flex items-center justify-center mt-2">
+                                <span className="text-yellow-700 font-medium">⏳ Pending AI Validation</span>
+                            </div>
+                        )}
+                        {questions[currentCardIndex].answerStatus === 2 && (
+                            <div className="flex items-center justify-center mt-2">
+                                <span className="text-green-700 font-medium">🎉 Approved!</span>
+                            </div>
+                        )}
+                        {questions[currentCardIndex].answerStatus === 3 && (
+                            <div className="flex items-center justify-center mt-2">
+                                <span className="text-red-700 font-medium">😔 Rejected</span>
+                            </div>
+                        )}
                     </div>
                     <div className="flex items-center gap-2 mb-4">
                         <span className="text-sm text-gray-500">
@@ -656,39 +678,41 @@ export default function AudioRecorder() {
                     </div>
                 </div>
 
-                {/* Big round Start Recording button or Stop button */}
-                <div className="flex flex-col items-center w-full mb-6">
-                    {!isRecording ? (
-                        <button
-                            onClick={startRecording}
-                            disabled={uploading}
-                            className="start-recording-btn mb-2 animate-pop"
-                        >
-                        </button>
-                    ) : (
-                        <>
-                            <div className="flex flex-col items-center mb-4">
-                                <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
-                                    <div
-                                        className="bg-red-500 h-2 rounded-full transition-all duration-100"
-                                        style={{ width: `${Math.min((recordingDuration / 60) * 100, 100)}%` }}
-                                    ></div>
-                                </div>
-                                <span className="text-red-500 font-medium text-sm">
-                                    Recording: {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
-                                </span>
-                            </div>
+                {/* Big round Start Recording button or Stop button - only for unanswered questions */}
+                {questions[currentCardIndex].answerStatus === 0 && (
+                    <div className="flex flex-col items-center w-full mb-6">
+                        {!isRecording ? (
                             <button
-                                onClick={stopRecording}
+                                onClick={startRecording}
                                 disabled={uploading}
-                                className="stop-recording-btn mb-2 animate-pop"
+                                className="start-recording-btn mb-2 animate-pop"
                             >
                             </button>
-                        </>
-                    )}
-                </div>
+                        ) : (
+                            <>
+                                <div className="flex flex-col items-center mb-4">
+                                    <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                                        <div
+                                            className="bg-red-500 h-2 rounded-full transition-all duration-100"
+                                            style={{ width: `${Math.min((recordingDuration / 60) * 100, 100)}%` }}
+                                        ></div>
+                                    </div>
+                                    <span className="text-red-500 font-medium text-sm">
+                                        Recording: {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
+                                    </span>
+                                </div>
+                                <button
+                                    onClick={stopRecording}
+                                    disabled={uploading}
+                                    className="stop-recording-btn mb-2 animate-pop"
+                                >
+                                </button>
+                            </>
+                        )}
+                    </div>
+                )}
 
-                {questionRecordings[currentCardIndex] && !isRecording && (
+                {questions[currentCardIndex].answerStatus === 0 && questionRecordings[currentCardIndex] && !isRecording && (
                     <div className="mb-6 w-full">
                         <audio controls src={URL.createObjectURL(questionRecordings[currentCardIndex])} className="w-full rounded-lg border border-gray-200 shadow-sm" />
                     </div>
@@ -701,7 +725,7 @@ export default function AudioRecorder() {
                         }`}>{uploadStatus}</p>
                 )}
 
-                {questionRecordings[currentCardIndex] && !isRecording && (
+                {questions[currentCardIndex].answerStatus === 0 && questionRecordings[currentCardIndex] && !isRecording && (
                     <button
                         onClick={handleUpload}
                         disabled={!questionRecordings[currentCardIndex] || uploading}
