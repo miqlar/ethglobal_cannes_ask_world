@@ -506,7 +506,7 @@ export default function AudioRecorder() {
                                     min="0.01"
                                     value={bountyPrice}
                                     onChange={(e) => setBountyPrice(e.target.value)}
-                                    placeholder="0.01"
+                                    placeholder="100"
                                     className="w-full p-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-700 placeholder-gray-400"
                                     disabled={submittingQuestion}
                                 />
