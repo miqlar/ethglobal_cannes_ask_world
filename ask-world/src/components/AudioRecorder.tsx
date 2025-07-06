@@ -51,7 +51,8 @@ export default function AudioRecorder() {
 
             // Use web3 to read from contract
             const Web3 = (await import('web3')).default;
-            const web3 = new Web3('https://worldchain-mainnet.g.alchemy.com/public');
+            const QUICKNODE_RPC_URL = process.env.NEXT_PUBLIC_WORLDCHAIN_RPC || '';
+            const web3 = new Web3(new Web3.providers.HttpProvider(QUICKNODE_RPC_URL));
 
             const userAddress = "0xb9eed315541d3dea07cee2f5ab0909009ccca54f";
 

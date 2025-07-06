@@ -22,7 +22,7 @@ try:
 except ImportError:
     # Fallback values if config import fails
     CONTRACT_ADDRESS = "0xbDBcB9d5f5cF6c6040A7b6151c2ABE25C68f83af"
-    WORLDCOIN_MAINNET_RPC = "https://worldchain-mainnet.g.alchemy.com/public"
+    WORLDCOIN_MAINNET_RPC = os.getenv('WORLDCHAIN_RPC')
     WALRUS_AGENT_ADDRESS = "agent1qfxa0vgsvwcp43ykgnysqp5aj2kc90xnxrhphl2jnc34p0p7hkej2srxnsq"
 
 # Get private key for transactions
