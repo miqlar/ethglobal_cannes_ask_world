@@ -11,7 +11,7 @@ function isSafari() {
     return /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 }
 
-const CONTRACT_ADDRESS = "0x185591a5DC4B65B8B7AF5befca02C702F23C476C";
+const CONTRACT_ADDRESS = "0x5549a2e7a5b6ee6b556c0ee5ef5256b7c4ed46d6";
 
 export default function AudioRecorder() {
     const [isRecording, setIsRecording] = useState(false);
@@ -39,14 +39,89 @@ export default function AudioRecorder() {
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
 
+    // Function to fetch questions from contract
+    const fetchQuestionsFromContract = async () => {
+        try {
+            setLoadingQuestions(true);
+
+            // Use web3 to read from contract
+            const Web3 = (await import('web3')).default;
+            const web3 = new Web3('https://worldchain-mainnet.g.alchemy.com/public');
+
+            const userAddress = "0xb9eed315541d3dea07cee2f5ab0909009ccca54f";
+
+            // First, get the question IDs and answer status
+            const contract = new web3.eth.Contract(CONTRACT_ABI, CONTRACT_ADDRESS);
+
+            const result = await contract.methods.getQuestionsWithAnswerStatus(userAddress).call();
+
+            console.log('getQuestionsWithAnswerStatus result:', result);
+            console.log('Result type:', typeof result);
+            console.log('Is array:', Array.isArray(result));
+            console.log('Result length:', result ? result.length : 'null/undefined');
+
+            if (result && typeof result === 'object' && 'questionIds' in result && 'answerStatus' in result) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const questionIds = (result as any).questionIds as string[];
+
+                // Fetch details for each question that hasn't been answered (status 0)
+                const questionsData = [];
+                for (let i = 0; i < questionIds.length; i++) {
+                    const questionId = questionIds[i];
+
+                    // Only include questions that haven't been answered (status 0 = not answered)
+                    try {
+                        const questionResult = await contract.methods.getQuestion(questionId).call();
+
+                        if (questionResult) {
+                            questionsData.push({
+                                id: parseInt(questionId),
+                                text: questionResult[2] as string, // prompt
+                                reward: parseFloat(questionResult[4] as string) / 1e6, // bounty
+                            });
+                        }
+                    } catch (error) {
+                        console.error(`Error fetching question ${questionId}:`, error);
+                    }
+                }
+
+                setQuestions(questionsData);
+            } else {
+                // Fallback to hardcoded questions if no questions found
+                const fallbackQuestions = [
+                    { id: 1, text: "What's your favorite way to spend a weekend?", reward: 50 },
+                    { id: 2, text: "If you could have dinner with anyone, who would it be?", reward: 75 },
+                    { id: 3, text: "What's the most valuable lesson you've learned?", reward: 100 },
+                    { id: 4, text: "What's your biggest dream for the future?", reward: 150 },
+                    { id: 5, text: "What makes you feel most alive?", reward: 200 },
+                ];
+                setQuestions(fallbackQuestions);
+            }
+
+        } catch (error) {
+            console.error('Error fetching questions from contract:', error);
+            // Fallback to hardcoded questions on error
+            const fallbackQuestions = [
+                { id: 1, text: "What's your favorite way to spend a weekend?", reward: 50 },
+                { id: 2, text: "If you could have dinner with anyone, who would it be?", reward: 75 },
+                { id: 3, text: "What's the most valuable lesson you've learned?", reward: 100 },
+                { id: 4, text: "What's your biggest dream for the future?", reward: 150 },
+                { id: 5, text: "What makes you feel most alive?", reward: 200 },
+            ];
+            setQuestions(fallbackQuestions);
+        } finally {
+            setLoadingQuestions(false);
+        }
+    };
+
     // Use state for questions so we can update the list
-    const [questions, setQuestions] = useState([
-        { id: 1, text: "What's your favorite way to spend a weekend?", reward: 50 },
-        { id: 2, text: "If you could have dinner with anyone, who would it be?", reward: 75 },
-        { id: 3, text: "What's the most valuable lesson you've learned?", reward: 100 },
-        { id: 4, text: "What's your biggest dream for the future?", reward: 150 },
-        { id: 5, text: "What makes you feel most alive?", reward: 200 },
-    ]);
+    const [questions, setQuestions] = useState<Array<{ id: number, text: string, reward: number }>>([]);
+    const [loadingQuestions, setLoadingQuestions] = useState(true);
+
+    // Load questions from contract on component mount
+    useEffect(() => {
+        fetchQuestionsFromContract();
+    }, []);
 
     // Track recording duration
     useEffect(() => {
@@ -84,11 +159,8 @@ export default function AudioRecorder() {
                 console.log("transaction_id:", payload.transaction_id);
                 console.log("transaction id:", transactionId);
 
-                // Handle success case
-                setQuestions(prev => {
-                    const maxId = prev.length > 0 ? Math.max(...prev.map(q => q.id)) : 0;
-                    return [...prev, { id: maxId + 1, text: question.trim(), reward: bountyPrice.trim() ? parseFloat(bountyPrice) : 0 }];
-                });
+                // Handle success case - refresh questions from contract
+                fetchQuestionsFromContract();
 
                 setQuestionStatus('Question submitted successfully to contract!');
                 setToastType('success');
@@ -484,6 +556,39 @@ export default function AudioRecorder() {
                             Answer
                         </button>
                     </div>
+                </div>
+            </div>
+        );
+    }
+
+    // Loading state
+    if (loadingQuestions) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 via-purple-500 to-indigo-500 py-8 px-2">
+                <div className="w-full max-w-md bg-white/90 rounded-3xl shadow-2xl p-8 flex flex-col items-center animate-fade-in">
+                    <div className="flex items-center gap-3">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                        <span className="text-lg font-medium text-gray-700">加载问题中...</span>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // No questions available
+    if (questions.length === 0) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 via-purple-500 to-indigo-500 py-8 px-2">
+                <div className="w-full max-w-md bg-white/90 rounded-3xl shadow-2xl p-8 flex flex-col items-center animate-fade-in">
+                    <Image src="/askworld-logo.png" alt="Ask World Logo" width={180} height={180} className="mb-6 animate-pop" />
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">暂无可用问题</h2>
+                    <p className="text-gray-600 text-center mb-6">目前没有可以回答的问题。请稍后再试或创建一个新问题。</p>
+                    <button
+                        onClick={() => setShowRecorder(false)}
+                        className="px-6 py-3 rounded-full font-semibold shadow-md bg-gradient-to-r from-purple-500 to-indigo-500 text-white hover:from-purple-600 hover:to-indigo-600 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                    >
+                        返回主页
+                    </button>
                 </div>
             </div>
         );
