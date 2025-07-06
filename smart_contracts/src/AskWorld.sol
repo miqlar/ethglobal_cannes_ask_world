@@ -12,9 +12,10 @@ contract AskWorld is Ownable, ReentrancyGuard {
 
     // Enums
     enum AnswerStatus {
-        PENDING,        // 0 - Waiting for AI validation
-        REJECTED,       // 1 - AI rejected the answer
-        APPROVED        // 2 - AI approved and paid out
+        UNANSWERED,    // 0 - User has not answered
+        PENDING,       // 1 - Waiting for AI validation
+        APPROVED,      // 2 - AI approved and paid out
+        REJECTED       // 3 - AI rejected the answer
     }
 
     enum QuestionStatus {
@@ -619,47 +620,47 @@ contract AskWorld is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @dev Get all questions and whether a user has answered them
+     * @dev Get all questions and the user's answer status for each
      * @param user Address to check for answers
      * @return questionIds Array of all question IDs
-     * @return hasAnswered Array indicating if user has answered each question (true/false)
+     * @return answerStatus Array indicating the user's answer status for each question (0=UNANSWERED, 1=PENDING, 2=APPROVED, 3=REJECTED)
      */
     function getQuestionsWithAnswerStatus(address user) 
         external 
         view 
         returns (
             uint256[] memory questionIds,
-            bool[] memory hasAnswered
+            uint8[] memory answerStatus
         ) 
     {
         uint256[] memory tempQuestionIds = new uint256[](_questionIds);
-        bool[] memory tempHasAnswered = new bool[](_questionIds);
+        uint8[] memory tempAnswerStatus = new uint8[](_questionIds);
         uint256 count = 0;
         
         for (uint256 i = 1; i <= _questionIds; i++) {
             if (questions[i].exists) {
                 tempQuestionIds[count] = i;
                 
-                // Check if user has answered this question
-                bool answered = false;
+                // Default: UNANSWERED
+                uint8 status = uint8(AnswerStatus.UNANSWERED);
                 for (uint256 j = 0; j < questionAnswers[i].length; j++) {
                     if (questionAnswers[i][j].provider == user) {
-                        answered = true;
+                        status = uint8(questionAnswers[i][j].status);
                         break;
                     }
                 }
-                tempHasAnswered[count] = answered;
+                tempAnswerStatus[count] = status;
                 count++;
             }
         }
         
         // Create properly sized arrays
         questionIds = new uint256[](count);
-        hasAnswered = new bool[](count);
+        answerStatus = new uint8[](count);
         
         for (uint256 i = 0; i < count; i++) {
             questionIds[i] = tempQuestionIds[i];
-            hasAnswered[i] = tempHasAnswered[i];
+            answerStatus[i] = tempAnswerStatus[i];
         }
     }
 
