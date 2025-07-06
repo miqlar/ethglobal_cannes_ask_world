@@ -41,11 +41,11 @@ export default function AudioRecorder() {
 
     // Use state for questions so we can update the list
     const [questions, setQuestions] = useState([
-        { id: 1, text: "What's your favorite way to spend a weekend?" },
-        { id: 2, text: "If you could have dinner with anyone, who would it be?" },
-        { id: 3, text: "What's the most valuable lesson you've learned?" },
-        { id: 4, text: "What's your biggest dream for the future?" },
-        { id: 5, text: "What makes you feel most alive?" },
+        { id: 1, text: "What's your favorite way to spend a weekend?", reward: 50 },
+        { id: 2, text: "If you could have dinner with anyone, who would it be?", reward: 75 },
+        { id: 3, text: "What's the most valuable lesson you've learned?", reward: 100 },
+        { id: 4, text: "What's your biggest dream for the future?", reward: 150 },
+        { id: 5, text: "What makes you feel most alive?", reward: 200 },
     ]);
 
     // Track recording duration
@@ -87,7 +87,7 @@ export default function AudioRecorder() {
                 // Handle success case
                 setQuestions(prev => {
                     const maxId = prev.length > 0 ? Math.max(...prev.map(q => q.id)) : 0;
-                    return [...prev, { id: maxId + 1, text: question.trim() }];
+                    return [...prev, { id: maxId + 1, text: question.trim(), reward: bountyPrice.trim() ? parseFloat(bountyPrice) : 0 }];
                 });
 
                 setQuestionStatus('Question submitted successfully to contract!');
@@ -396,7 +396,7 @@ export default function AudioRecorder() {
                         <div className="flex gap-4 mb-4">
                             <div className="flex-1">
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Total Award (ETH)
+                                    Total Reward (USDC)
                                 </label>
                                 <input
                                     type="number"
@@ -418,7 +418,7 @@ export default function AudioRecorder() {
                                     min="1"
                                     value={maxSubmissions}
                                     onChange={(e) => setMaxSubmissions(e.target.value)}
-                                    placeholder="5"
+                                    placeholder="100"
                                     className="w-full p-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-700 placeholder-gray-400"
                                     disabled={submittingQuestion}
                                 />
@@ -542,6 +542,11 @@ export default function AudioRecorder() {
                     <div className="flex items-center gap-2 mb-4">
                         <span className="text-sm text-gray-500">
                             Question {currentCardIndex + 1} of {questions.length}
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-2 mb-4">
+                        <span className="text-lg font-semibold text-green-600">
+                            💰 {questions[currentCardIndex].reward} USDC Reward
                         </span>
                     </div>
                 </div>
