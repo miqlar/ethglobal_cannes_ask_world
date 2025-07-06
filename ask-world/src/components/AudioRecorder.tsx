@@ -7,6 +7,7 @@ import { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
 import CONTRACT_ABI from "../../abi/askworld.json";
 import Confetti from './Confetti';
+import SkullRain from './SkullRain';
 
 function isSafari() {
     return /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
@@ -38,6 +39,8 @@ export default function AudioRecorder() {
     const [transactionPending, setTransactionPending] = useState(false);
     const [questionRecordings, setQuestionRecordings] = useState<Record<number, Blob>>({});
     const [showConfetti, setShowConfetti] = useState(false);
+    const [showSkullRain, setShowSkullRain] = useState(false);
+    const [animatedQuestions, setAnimatedQuestions] = useState<Set<number>>(new Set());
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
 
@@ -128,11 +131,24 @@ export default function AudioRecorder() {
         fetchQuestionsFromContract();
     }, []);
 
-    // Show confetti when an approved answer is displayed
+    // Show confetti when an approved answer is displayed (only first time)
     useEffect(() => {
         if (questions.length > 0 && questions[currentCardIndex]?.answerStatus === 2) {
-            setShowConfetti(true);
-            const timer = setTimeout(() => setShowConfetti(false), 16000);
+            const questionId = questions[currentCardIndex].id;
+            if (!animatedQuestions.has(questionId)) {
+                setShowConfetti(true);
+                setAnimatedQuestions(prev => new Set([...prev, questionId]));
+                const timer = setTimeout(() => setShowConfetti(false), 6000);
+                return () => clearTimeout(timer);
+            }
+        }
+    }, [currentCardIndex, questions, animatedQuestions]);
+
+    // Show skull rain when a rejected answer is displayed
+    useEffect(() => {
+        if (questions.length > 0 && questions[currentCardIndex]?.answerStatus === 3) {
+            setShowSkullRain(true);
+            const timer = setTimeout(() => setShowSkullRain(false), 8000);
             return () => clearTimeout(timer);
         }
     }, [currentCardIndex, questions]);
@@ -582,7 +598,7 @@ export default function AudioRecorder() {
                 <div className="w-full max-w-md bg-white/90 rounded-3xl shadow-2xl p-8 flex flex-col items-center animate-fade-in">
                     <div className="flex items-center gap-3">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-                        <span className="text-lg font-medium text-gray-700">加载问题中...</span>
+                        <span className="text-lg font-medium text-gray-700">Loading questions...</span>
                     </div>
                 </div>
             </div>
@@ -595,13 +611,13 @@ export default function AudioRecorder() {
             <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 via-purple-500 to-indigo-500 py-8 px-2">
                 <div className="w-full max-w-md bg-white/90 rounded-3xl shadow-2xl p-8 flex flex-col items-center animate-fade-in">
                     <Image src="/askworld-logo.png" alt="Ask World Logo" width={180} height={180} className="mb-6 animate-pop" />
-                    <h2 className="text-xl font-bold text-gray-900 mb-4">暂无可用问题</h2>
-                    <p className="text-gray-600 text-center mb-6">目前没有可以回答的问题。请稍后再试或创建一个新问题。</p>
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">No Questions Available</h2>
+                    <p className="text-gray-600 text-center mb-6">There are currently no questions to answer. Please try again later or create a new question.</p>
                     <button
                         onClick={() => setShowRecorder(false)}
                         className="px-6 py-3 rounded-full font-semibold shadow-md bg-gradient-to-r from-purple-500 to-indigo-500 text-white hover:from-purple-600 hover:to-indigo-600 focus:outline-none focus:ring-2 focus:ring-purple-400"
                     >
-                        返回主页
+                        Back to Home
                     </button>
                 </div>
             </div>
@@ -612,6 +628,7 @@ export default function AudioRecorder() {
     return (
         <>
             <Confetti isActive={showConfetti} />
+            <SkullRain isActive={showSkullRain} />
             <div
                 className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 via-purple-500 to-indigo-500 py-8 px-2"
                 onTouchStart={handleTouchStart}
@@ -655,7 +672,7 @@ export default function AudioRecorder() {
                 <div className={`w-full max-w-md rounded-3xl shadow-2xl p-8 flex flex-col items-center animate-fade-in ${questions[currentCardIndex].answerStatus === 0 ? 'bg-white/90' :
                     questions[currentCardIndex].answerStatus === 1 ? 'bg-yellow-200/95' :
                         questions[currentCardIndex].answerStatus === 2 ? 'bg-green-200/95' :
-                            'bg-red-200/95'
+                            'bg-red-600/95'
                     }`}>
                     {/* Question display */}
                     <div className="flex flex-col items-center mb-6 w-full">
@@ -689,7 +706,7 @@ export default function AudioRecorder() {
                                 <span className="text-lg font-semibold text-green-800">
                                     💰 {(questions[currentCardIndex].reward * 100000).toFixed(2)} USDC Reward Received
                                 </span>
-                            ) : (
+                            ) : questions[currentCardIndex].answerStatus === 3 ? null : (
                                 <span className="text-lg font-semibold text-green-600">
                                     💰 {(questions[currentCardIndex].reward * 100000).toFixed(2)} USDC Reward
                                 </span>

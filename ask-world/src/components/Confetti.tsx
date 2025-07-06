@@ -24,7 +24,7 @@ export default function Confetti({ isActive }: { isActive: boolean }) {
         }
 
         // Create confetti pieces
-        const newPieces: ConfettiPiece[] = Array.from({ length: 300 }, (_, i) => ({
+        const newPieces: ConfettiPiece[] = Array.from({ length: 100 }, (_, i) => ({
             id: i,
             x: Math.random() * window.innerWidth,
             y: -10,
