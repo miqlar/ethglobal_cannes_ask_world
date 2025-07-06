@@ -1,11 +1,11 @@
 # Feedback System Smart Contract (Foundry)
 
-A smart contract system for managing feedback requests with IPFS audio files and AI validation, built with Foundry.
+A smart contract system for managing feedback requests with Walrus audio files and AI validation, built with Foundry.
 
 ## Features
 
 - **Feedback Requests**: Anyone can create feedback requests with bounty and instructions
-- **IPFS Audio Files**: Users submit feedback as IPFS audio file hashes
+- **Walrus Audio Files**: Users submit feedback as Walrus audio file blob IDs
 - **AI Validation**: AI agents can validate feedbacks as VALID or NOT_VALID
 - **Automatic Closure**: Requests close when enough valid feedbacks are received
 - **Bounty Distribution**: Valid feedback providers can claim their share of the bounty
@@ -74,7 +74,7 @@ make interact
 - `closeRequest()` - Manually close a request
 
 ### For Feedback Providers
-- `submitFeedback()` - Submit feedback with IPFS audio hash
+- `submitFeedback()` - Submit feedback with Walrus audio blob ID
 - `claimBounty()` - Claim bounty for valid feedback
 
 ### For AI Validators
@@ -145,14 +145,14 @@ make clean
 ### Core Components
 
 1. **FeedbackRequest**: Contains request details, bounty, and status
-2. **Feedback**: Contains feedback submission with IPFS hash and validation status
+2. **Feedback**: Contains feedback submission with Walrus blob ID and validation status
 3. **AI Validators**: Authorized addresses that can validate feedbacks
 4. **Bounty System**: Automatic distribution when requests close
 
 ### Workflow
 
 1. **Request Creation**: User creates feedback request with bounty and instructions
-2. **Feedback Submission**: Users submit IPFS audio file hashes
+2. **Feedback Submission**: Users submit Walrus audio file blob IDs
 3. **AI Validation**: AI agents validate each feedback
 4. **Automatic Closure**: Request closes when enough valid feedbacks
 5. **Bounty Claims**: Valid feedback providers claim their share

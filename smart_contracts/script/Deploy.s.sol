@@ -45,7 +45,7 @@ contract DeployScript is Script {
         
         // Add initial AI validator if different from deployer
         if (initialAIValidator != deployer) {
-            askWorld.addAIValidator(initialAIValidator);
+            askWorld.owner_addAIValidator(initialAIValidator);
             console.log("Added initial AI validator:", initialAIValidator);
         }
         
@@ -94,7 +94,7 @@ contract DeployTestScript is Script {
         console.log("Owner:", askWorld.owner());
         
         // Add deployer as AI validator for testing
-        askWorld.addAIValidator(deployer);
+        askWorld.owner_addAIValidator(deployer);
         console.log("Added deployer as AI validator for testing");
     }
 } 

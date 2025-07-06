@@ -354,7 +354,7 @@ async def validate_unanswered_questions(ctx) -> str:
 
 📝 **Answer to Validate:**
 👤 Provider: {provider}
-🎵 Audio Hash (Blob ID): {audio_hash}
+🎵 Blob ID: {blob_id}
 📊 Answer Index: {answer_index}
 🕐 Submitted: {submitted_at}
 
