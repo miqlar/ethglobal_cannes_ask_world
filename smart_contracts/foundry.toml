@@ -27,7 +27,6 @@ worldchain_mainnet = "${WORLDCHAIN_MAINNET_RPC_URL}"
 
 [etherscan]
 ethereum_sepolia = { key = "${ETHERSCAN_API_KEY}" }
-base_sepolia = { key = "${BASESCAN_API_KEY}" }
 worldchain_sepolia = { key = "${WORLDCOIN_API_KEY}" }
 worldchain_mainnet = { key = "${WORLDCOIN_API_KEY}" }
 

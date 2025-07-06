@@ -21,7 +21,7 @@ try:
     from config import CONTRACT_ADDRESS, WORLDCOIN_MAINNET_RPC, WALRUS_AGENT_ADDRESS
 except ImportError:
     # Fallback values if config import fails
-    CONTRACT_ADDRESS = "0x185591a5DC4B65B8B7AF5befca02C702F23C476C"
+    CONTRACT_ADDRESS = "0x5549a2e7a5b6ee6b556c0ee5ef5256b7c4ed46d6"
     WORLDCOIN_MAINNET_RPC = "https://worldchain-mainnet.g.alchemy.com/public"
     WALRUS_AGENT_ADDRESS = "agent1qfxa0vgsvwcp43ykgnysqp5aj2kc90xnxrhphl2jnc34p0p7hkej2srxnsq"
 
@@ -284,7 +284,7 @@ async def validate_answer_transaction(question_id: int, answer_index: int, is_va
         receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
         
         if receipt.status == 1:
-            return f"✅ Transaction successful!\n🔗 TX Hash: {tx_hash.hex()}\n📊 Gas Used: {receipt.gasUsed}\n💰 Gas Price: {receipt.effectiveGasPrice} wei\n✅ Answer marked as {'VALID' if is_valid else 'INVALID'}"
+            return f"✅ Transaction successful!\n🔗 TX Hash: {tx_hash.hex()}\n📊 Gas Used: {receipt.gasUsed}\n💰 Gas Price: {receipt.effectiveGasPrice} wei\n📝 Answer marked as {'VALID' if is_valid else 'INVALID'}"
         else:
             return f"❌ Transaction failed!\n🔗 TX Hash: {tx_hash.hex()}\n📊 Gas Used: {receipt.gasUsed}"
             
@@ -304,6 +304,9 @@ async def validate_unanswered_questions(ctx) -> str:
         try:
             unvalidated_result = contract.functions.getNextUnvalidatedAnswer().call()
             question_id, answer_index, provider, audio_hash, submitted_at = unvalidated_result
+            
+            # Debug: Print the values to see what we got
+            print(f"🔍 Debug: question_id={question_id}, answer_index={answer_index}, provider={provider}, audio_hash={audio_hash}, submitted_at={submitted_at}")
             
             if question_id == 0:
                 return "✅ No unvalidated answers found."
@@ -354,12 +357,12 @@ async def validate_unanswered_questions(ctx) -> str:
 
 📝 **Answer to Validate:**
 👤 Provider: {provider}
-🎵 Blob ID: {blob_id}
+🎵 Blob ID: {audio_hash}
 📊 Answer Index: {answer_index}
 🕐 Submitted: {submitted_at}
 
 🎵 **Audio Transcription:**
-{transcription_result}
+{transcription_result_clean}
 {llm_result_text}"""
         
         # Submit transaction to blockchain
@@ -440,7 +443,7 @@ async def validate_specific_answer(ctx, question_id: int, answer_index: int) -> 
 🕐 Submitted: {submitted_at}
 
 🎵 **Audio Transcription:**
-{transcription_result}
+{transcription_result_clean}
 {llm_result_text}"""
         
         return result_text
@@ -464,7 +467,7 @@ async def summarize_valid_answers(ctx, question_id: int) -> str:
         # Filter for valid answers (status = 1)
         valid_answer_indices = []
         for i, answer in enumerate(all_answers):
-            if answer[2] == 1:  # status is Valid
+            if answer[2] == 2:  # status is Valid
                 valid_answer_indices.append(i)
         
         if not valid_answer_indices:
