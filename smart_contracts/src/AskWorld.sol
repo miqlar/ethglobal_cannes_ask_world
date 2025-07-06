@@ -242,7 +242,7 @@ contract AskWorld is Ownable, ReentrancyGuard {
      * HACKATHON DEMO: This function allows easy answer state modification for demo purposes
      * @param questionId ID of the question
      * @param answerIndex Index of the answer to overwrite
-     * @param newStatus New status for the answer (0=PENDING, 1=APPROVED, 2=REJECTED)
+     * @param newStatus New status for the answer (0=PENDING, 1=APPROVED, 2=REJECTED, 3=PROCESSING)
      * @param newBlobId New blob ID (optional, empty string to keep existing)
      */
     function owner_overwriteAnswerState(
@@ -252,7 +252,7 @@ contract AskWorld is Ownable, ReentrancyGuard {
         string memory newBlobId
     ) external onlyOwner questionExists(questionId) {
         require(answerIndex < questionAnswers[questionId].length, "Answer does not exist");
-        require(newStatus <= 2, "Invalid status (0=PENDING, 1=APPROVED, 2=REJECTED)");
+        require(newStatus <= 3, "Invalid status (0=PENDING, 1=APPROVED, 2=REJECTED, 3=PROCESSING)");
         
         Answer storage answer = questionAnswers[questionId][answerIndex];
         AnswerStatus oldStatus = answer.status;
