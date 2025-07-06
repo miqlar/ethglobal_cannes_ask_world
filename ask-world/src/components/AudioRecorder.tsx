@@ -305,6 +305,8 @@ export default function AudioRecorder() {
                 ],
             });
             setUploadStatus('Transaction sent to World Chain!');
+            setToastType('success');
+            setShowToast(true);
 
             // Clear the recording for the current question after successful upload
             setQuestionRecordings(prev => {
@@ -587,7 +589,10 @@ export default function AudioRecorder() {
                 )}
 
                 {uploadStatus && (
-                    <p className={`mb-4 text-center text-base font-medium ${uploadStatus.startsWith('Upload successful') ? 'text-green-600' : 'text-red-600'}`}>{uploadStatus}</p>
+                    <p className={`mb-4 text-center text-base font-medium ${uploadStatus.startsWith('Upload successful') || uploadStatus.startsWith('Uploading to Walrus') || uploadStatus.startsWith('Transaction sent to World Chain')
+                            ? 'text-green-600'
+                            : 'text-red-600'
+                        }`}>{uploadStatus}</p>
                 )}
 
                 {questionRecordings[currentCardIndex] && !isRecording && (
