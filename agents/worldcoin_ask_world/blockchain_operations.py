@@ -467,7 +467,7 @@ async def summarize_valid_answers(ctx, question_id: int) -> str:
         # Filter for valid answers (status = 1)
         valid_answer_indices = []
         for i, answer in enumerate(all_answers):
-            if answer[2] == 1:  # status is Valid
+            if answer[2] == 2:  # status is Valid
                 valid_answer_indices.append(i)
         
         if not valid_answer_indices:
