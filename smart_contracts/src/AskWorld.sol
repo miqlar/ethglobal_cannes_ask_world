@@ -12,9 +12,10 @@ contract AskWorld is Ownable, ReentrancyGuard {
 
     // Enums
     enum AnswerStatus {
-        PENDING,        // 0 - Waiting for AI validation
-        REJECTED,       // 1 - AI rejected the answer
-        APPROVED        // 2 - AI approved and paid out
+        UNANSWERED,    // 0 - User has not answered
+        PENDING,       // 1 - Waiting for AI validation
+        APPROVED,      // 2 - AI approved and paid out
+        REJECTED       // 3 - AI rejected the answer
     }
 
     enum QuestionStatus {
@@ -40,7 +41,7 @@ contract AskWorld is Ownable, ReentrancyGuard {
 
     struct Answer {
         address provider;
-        string audioHash;
+        string blobId;  // Walrus blob ID instead of IPFS hash
         AnswerStatus status;
         uint256 submittedAt;
         uint256 validatedAt;
@@ -73,7 +74,7 @@ contract AskWorld is Ownable, ReentrancyGuard {
         uint256 indexed answerId,
         uint256 indexed questionId,
         address indexed provider,
-        string audioHash
+        string blobId
     );
 
     event AnswerValidated(
@@ -163,19 +164,19 @@ contract AskWorld is Ownable, ReentrancyGuard {
     /**
      * @dev Submit an answer to a question
      * @param questionId ID of the question
-     * @param audioHash IPFS hash of the audio file
+     * @param blobId Walrus blob ID of the audio file
      */
     function submitAnswer(
         uint256 questionId,
-        string memory audioHash
+        string memory blobId
     ) external questionExists(questionId) questionOpen(questionId) {
-        require(bytes(audioHash).length > 0, "Audio hash cannot be empty");
+        require(bytes(blobId).length > 0, "Blob ID cannot be empty");
         
         // HACKATHON MODE: Removed constraint to allow multiple answers from same user for testing
 
         Answer memory newAnswer = Answer({
             provider: msg.sender,
-            audioHash: audioHash,
+            blobId: blobId,
             status: AnswerStatus.PENDING,
             submittedAt: block.timestamp,
             validatedAt: 0
@@ -188,7 +189,7 @@ contract AskWorld is Ownable, ReentrancyGuard {
         questions[questionId].totalAnswersCount++;
         totalAnswers++;
 
-        emit AnswerSubmitted(answerIndex, questionId, msg.sender, audioHash);
+        emit AnswerSubmitted(answerIndex, questionId, msg.sender, blobId);
     }
 
     /**
@@ -237,6 +238,51 @@ contract AskWorld is Ownable, ReentrancyGuard {
     }
 
     /**
+     * @dev Overwrite the state of any answer (only owner)
+     * HACKATHON DEMO: This function allows easy answer state modification for demo purposes
+     * @param questionId ID of the question
+     * @param answerIndex Index of the answer to overwrite
+     * @param newStatus New status for the answer (0=PENDING, 1=APPROVED, 2=REJECTED)
+     * @param newBlobId New blob ID (optional, empty string to keep existing)
+     */
+    function owner_overwriteAnswerState(
+        uint256 questionId,
+        uint256 answerIndex,
+        uint8 newStatus,
+        string memory newBlobId
+    ) external onlyOwner questionExists(questionId) {
+        require(answerIndex < questionAnswers[questionId].length, "Answer does not exist");
+        require(newStatus <= 2, "Invalid status (0=PENDING, 1=APPROVED, 2=REJECTED)");
+        
+        Answer storage answer = questionAnswers[questionId][answerIndex];
+        AnswerStatus oldStatus = answer.status;
+        
+        // Update blob ID if provided
+        if (bytes(newBlobId).length > 0) {
+            answer.blobId = newBlobId;
+        }
+        
+        // Handle status change
+        if (oldStatus != AnswerStatus(newStatus)) {
+            // If changing from approved to something else, decrease valid count
+            if (oldStatus == AnswerStatus.APPROVED && AnswerStatus(newStatus) != AnswerStatus.APPROVED) {
+                questions[questionId].validAnswersCount--;
+                totalValidAnswers--;
+            }
+            // If changing to approved from something else, increase valid count
+            else if (oldStatus != AnswerStatus.APPROVED && AnswerStatus(newStatus) == AnswerStatus.APPROVED) {
+                questions[questionId].validAnswersCount++;
+                totalValidAnswers++;
+            }
+            
+            answer.status = AnswerStatus(newStatus);
+            answer.validatedAt = block.timestamp;
+        }
+        
+        emit AnswerValidated(answerIndex, questionId, answer.status, msg.sender);
+    }
+
+    /**
      * @dev Close a question manually (only asker or owner)
      * @param questionId ID of the question to close
      */
@@ -255,11 +301,11 @@ contract AskWorld is Ownable, ReentrancyGuard {
     }
 
     // AI Validator Management
-    function addAIValidator(address validator) external onlyOwner {
+    function owner_addAIValidator(address validator) external onlyOwner {
         aiValidators[validator] = true;
     }
 
-    function removeAIValidator(address validator) external onlyOwner {
+    function owner_removeAIValidator(address validator) external onlyOwner {
         aiValidators[validator] = false;
     }
 
@@ -268,9 +314,154 @@ contract AskWorld is Ownable, ReentrancyGuard {
     }
 
     // Emergency functions
-    function emergencyWithdraw() external onlyOwner {
+    function owner_emergencyWithdraw() external onlyOwner {
         (bool success, ) = payable(owner()).call{value: address(this).balance}("");
         require(success, "Transfer failed");
+    }
+
+    /**
+     * @dev Overwrite question details (only owner)
+     * HACKATHON DEMO: This function allows easy question modification for demo purposes
+     * @param questionId ID of the question to overwrite
+     * @param newPrompt New question prompt
+     * @param newAnswersNeeded New number of answers needed
+     * @param newBounty New bounty amount (if 0, keeps existing bounty)
+     */
+    function owner_overwriteQuestion(
+        uint256 questionId,
+        string memory newPrompt,
+        uint256 newAnswersNeeded,
+        uint256 newBounty
+    ) external onlyOwner questionExists(questionId) {
+        Question storage question = questions[questionId];
+        
+        // Only allow overwriting if question is still open
+        require(question.status == QuestionStatus.OPEN, "Can only overwrite open questions");
+        
+        // Update question details
+        if (bytes(newPrompt).length > 0) {
+            question.prompt = newPrompt;
+        }
+        
+        if (newAnswersNeeded > 0) {
+            question.answersNeeded = newAnswersNeeded;
+        }
+        
+        // Handle bounty update
+        if (newBounty > 0) {
+            // If new bounty is provided, update it
+            question.bounty = newBounty;
+        }
+        
+        emit QuestionAsked(
+            questionId,
+            question.asker,
+            question.prompt,
+            question.answersNeeded,
+            question.bounty
+        );
+    }
+
+    /**
+     * @dev Force close a question and refund bounty (only owner)
+     * HACKATHON DEMO: This function allows easy question closure for demo purposes
+     * @param questionId ID of the question to force close
+     */
+    function owner_forceCloseQuestion(uint256 questionId) external onlyOwner questionExists(questionId) {
+        Question storage question = questions[questionId];
+        
+        require(question.status == QuestionStatus.OPEN, "Question is not open");
+        
+        // Refund the bounty to the asker
+        if (question.bounty > 0) {
+            (bool success, ) = payable(question.asker).call{value: question.bounty}("");
+            require(success, "Bounty refund failed");
+        }
+        
+        // Close the question
+        _closeQuestion(questionId);
+    }
+
+    /**
+     * @dev Delete the last question and all its answers (only owner)
+     * HACKATHON DEMO: This function allows easy cleanup for demo purposes
+     * Refunds the bounty to the asker
+     */
+    function owner_deleteLastQuestion() external onlyOwner {
+        require(_questionIds > 0, "No questions exist");
+        
+        uint256 lastQuestionId = _questionIds;
+        Question storage question = questions[lastQuestionId];
+        
+        require(question.exists, "Last question does not exist");
+        
+        // Refund the bounty to the asker
+        if (question.bounty > 0) {
+            (bool success, ) = payable(question.asker).call{value: question.bounty}("");
+            require(success, "Bounty refund failed");
+        }
+        
+        // Delete all answers for this question
+        delete questionAnswers[lastQuestionId];
+        
+        // Remove from user questions
+        uint256[] storage userQ = userQuestions[question.asker];
+        for (uint256 i = 0; i < userQ.length; i++) {
+            if (userQ[i] == lastQuestionId) {
+                // Remove this question from user's questions
+                userQ[i] = userQ[userQ.length - 1];
+                userQ.pop();
+                break;
+            }
+        }
+        
+        // Delete user answers for this question
+        for (uint256 i = 0; i < questionAnswers[lastQuestionId].length; i++) {
+            address provider = questionAnswers[lastQuestionId][i].provider;
+            delete userAnswers[provider][lastQuestionId]; // Clear all answers for this user for this question
+        }
+        
+        // Delete the question
+        delete questions[lastQuestionId];
+        
+        // Update counters
+        totalQuestions--;
+        totalAnswers -= question.totalAnswersCount;
+        totalValidAnswers -= question.validAnswersCount;
+        
+        // Decrement question ID counter
+        _questionIds--;
+    }
+
+    /**
+     * @dev Wipe all questions and answers, reset contract to initial state (only owner)
+     * HACKATHON DEMO: This function allows complete reset for demo purposes
+     * Refunds all bounties to their respective askers
+     */
+    function owner_wipeAllData() external onlyOwner {
+        // Refund all bounties first
+        for (uint256 i = 1; i <= _questionIds; i++) {
+            if (questions[i].exists && questions[i].bounty > 0) {
+                (bool success, ) = payable(questions[i].asker).call{value: questions[i].bounty}("");
+                require(success, "Bounty refund failed");
+            }
+        }
+        
+        // Clear all questions
+        for (uint256 i = 1; i <= _questionIds; i++) {
+            delete questions[i];
+            delete questionAnswers[i];
+        }
+        
+        // Clear all user mappings
+        // Note: This is a simplified approach. In production, you might want to track all users
+        // and clear their data more systematically
+        
+        // Reset counters
+        _questionIds = 0;
+        totalQuestions = 0;
+        totalAnswers = 0;
+        totalValidAnswers = 0;
     }
 
     // Internal functions
@@ -408,7 +599,7 @@ contract AskWorld is Ownable, ReentrancyGuard {
             uint256 questionId,
             uint256 answerIndex,
             address provider,
-            string memory audioHash,
+            string memory blobId,
             uint256 submittedAt
         ) 
     {
@@ -418,7 +609,7 @@ contract AskWorld is Ownable, ReentrancyGuard {
                 for (uint256 a = 0; a < questionAnswers[q].length; a++) {
                     if (questionAnswers[q][a].status == AnswerStatus.PENDING) {
                         Answer memory answer = questionAnswers[q][a];
-                        return (q, a, answer.provider, answer.audioHash, answer.submittedAt);
+                        return (q, a, answer.provider, answer.blobId, answer.submittedAt);
                     }
                 }
             }
@@ -426,5 +617,213 @@ contract AskWorld is Ownable, ReentrancyGuard {
         
         // No unvalidated answers found
         revert("No unvalidated answers found");
+    }
+
+    /**
+     * @dev Get all questions and the user's answer status for each
+     * @param user Address to check for answers
+     * @return questionIds Array of all question IDs
+     * @return answerStatus Array indicating the user's answer status for each question (0=UNANSWERED, 1=PENDING, 2=APPROVED, 3=REJECTED)
+     */
+    function getQuestionsWithAnswerStatus(address user) 
+        external 
+        view 
+        returns (
+            uint256[] memory questionIds,
+            uint8[] memory answerStatus
+        ) 
+    {
+        uint256[] memory tempQuestionIds = new uint256[](_questionIds);
+        uint8[] memory tempAnswerStatus = new uint8[](_questionIds);
+        uint256 count = 0;
+        
+        for (uint256 i = 1; i <= _questionIds; i++) {
+            if (questions[i].exists) {
+                tempQuestionIds[count] = i;
+                
+                // Default: UNANSWERED
+                uint8 status = uint8(AnswerStatus.UNANSWERED);
+                for (uint256 j = 0; j < questionAnswers[i].length; j++) {
+                    if (questionAnswers[i][j].provider == user) {
+                        status = uint8(questionAnswers[i][j].status);
+                        break;
+                    }
+                }
+                tempAnswerStatus[count] = status;
+                count++;
+            }
+        }
+        
+        // Create properly sized arrays
+        questionIds = new uint256[](count);
+        answerStatus = new uint8[](count);
+        
+        for (uint256 i = 0; i < count; i++) {
+            questionIds[i] = tempQuestionIds[i];
+            answerStatus[i] = tempAnswerStatus[i];
+        }
+    }
+
+    /**
+     * @dev Get all open questions and whether a user has answered them
+     * @param user Address to check for answers
+     * @return questionIds Array of open question IDs
+     * @return hasAnswered Array indicating if user has answered each question (true/false)
+     */
+    function getOpenQuestionsWithAnswerStatus(address user) 
+        external 
+        view 
+        returns (
+            uint256[] memory questionIds,
+            bool[] memory hasAnswered
+        ) 
+    {
+        uint256[] memory tempQuestionIds = new uint256[](_questionIds);
+        bool[] memory tempHasAnswered = new bool[](_questionIds);
+        uint256 count = 0;
+        
+        for (uint256 i = 1; i <= _questionIds; i++) {
+            if (questions[i].exists && 
+                questions[i].status == QuestionStatus.OPEN &&
+                questions[i].validAnswersCount < questions[i].answersNeeded) {
+                
+                tempQuestionIds[count] = i;
+                
+                // Check if user has answered this question
+                bool answered = false;
+                for (uint256 j = 0; j < questionAnswers[i].length; j++) {
+                    if (questionAnswers[i][j].provider == user) {
+                        answered = true;
+                        break;
+                    }
+                }
+                tempHasAnswered[count] = answered;
+                count++;
+            }
+        }
+        
+        // Create properly sized arrays
+        questionIds = new uint256[](count);
+        hasAnswered = new bool[](count);
+        
+        for (uint256 i = 0; i < count; i++) {
+            questionIds[i] = tempQuestionIds[i];
+            hasAnswered[i] = tempHasAnswered[i];
+        }
+    }
+
+    /**
+     * @dev Get detailed answer status for all questions
+     * @param user Address to check for answers
+     * @return questionIds Array of question IDs
+     * @return answerStatus Array with detailed status:
+     *         0 = Not answered
+     *         1 = Answered and pending validation
+     *         2 = Answered and approved
+     *         3 = Answered and rejected
+     */
+    function getQuestionsWithDetailedAnswerStatus(address user) 
+        external 
+        view 
+        returns (
+            uint256[] memory questionIds,
+            uint8[] memory answerStatus
+        ) 
+    {
+        uint256[] memory tempQuestionIds = new uint256[](_questionIds);
+        uint8[] memory tempAnswerStatus = new uint8[](_questionIds);
+        uint256 count = 0;
+        
+        for (uint256 i = 1; i <= _questionIds; i++) {
+            if (questions[i].exists) {
+                tempQuestionIds[count] = i;
+                
+                // Check user's answer status for this question
+                uint8 status = 0; // Default: Not answered
+                for (uint256 j = 0; j < questionAnswers[i].length; j++) {
+                    if (questionAnswers[i][j].provider == user) {
+                        // User has answered, check the status
+                        if (questionAnswers[i][j].status == AnswerStatus.PENDING) {
+                            status = 1; // Pending validation
+                        } else if (questionAnswers[i][j].status == AnswerStatus.APPROVED) {
+                            status = 2; // Approved
+                        } else if (questionAnswers[i][j].status == AnswerStatus.REJECTED) {
+                            status = 3; // Rejected
+                        }
+                        break; // User can only have one answer per question
+                    }
+                }
+                tempAnswerStatus[count] = status;
+                count++;
+            }
+        }
+        
+        // Create properly sized arrays
+        questionIds = new uint256[](count);
+        answerStatus = new uint8[](count);
+        
+        for (uint256 i = 0; i < count; i++) {
+            questionIds[i] = tempQuestionIds[i];
+            answerStatus[i] = tempAnswerStatus[i];
+        }
+    }
+
+    /**
+     * @dev Get detailed answer status for open questions only
+     * @param user Address to check for answers
+     * @return questionIds Array of open question IDs
+     * @return answerStatus Array with detailed status:
+     *         0 = Not answered
+     *         1 = Answered and pending validation
+     *         2 = Answered and approved
+     *         3 = Answered and rejected
+     */
+    function getOpenQuestionsWithDetailedAnswerStatus(address user) 
+        external 
+        view 
+        returns (
+            uint256[] memory questionIds,
+            uint8[] memory answerStatus
+        ) 
+    {
+        uint256[] memory tempQuestionIds = new uint256[](_questionIds);
+        uint8[] memory tempAnswerStatus = new uint8[](_questionIds);
+        uint256 count = 0;
+        
+        for (uint256 i = 1; i <= _questionIds; i++) {
+            if (questions[i].exists && 
+                questions[i].status == QuestionStatus.OPEN &&
+                questions[i].validAnswersCount < questions[i].answersNeeded) {
+                
+                tempQuestionIds[count] = i;
+                
+                // Check user's answer status for this question
+                uint8 status = 0; // Default: Not answered
+                for (uint256 j = 0; j < questionAnswers[i].length; j++) {
+                    if (questionAnswers[i][j].provider == user) {
+                        // User has answered, check the status
+                        if (questionAnswers[i][j].status == AnswerStatus.PENDING) {
+                            status = 1; // Pending validation
+                        } else if (questionAnswers[i][j].status == AnswerStatus.APPROVED) {
+                            status = 2; // Approved
+                        } else if (questionAnswers[i][j].status == AnswerStatus.REJECTED) {
+                            status = 3; // Rejected
+                        }
+                        break; // User can only have one answer per question
+                    }
+                }
+                tempAnswerStatus[count] = status;
+                count++;
+            }
+        }
+        
+        // Create properly sized arrays
+        questionIds = new uint256[](count);
+        answerStatus = new uint8[](count);
+        
+        for (uint256 i = 0; i < count; i++) {
+            questionIds[i] = tempQuestionIds[i];
+            answerStatus[i] = tempAnswerStatus[i];
+        }
     }
 } 

@@ -1,7 +1,7 @@
 {
   "name": "feedback-system-contracts",
   "version": "1.0.0",
-  "description": "Smart contracts for feedback system with IPFS audio files and AI validation",
+  "description": "Smart contracts for feedback system with Walrus audio files and AI validation",
   "main": "index.js",
   "scripts": {
     "compile": "hardhat compile",

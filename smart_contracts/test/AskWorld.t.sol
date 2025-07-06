@@ -21,7 +21,7 @@ contract AskWorldTest is Test {
         askWorld = new AskWorld();
         
         // Add AI validator
-        askWorld.addAIValidator(aiValidator);
+        askWorld.owner_addAIValidator(aiValidator);
         
         // Fund users
         vm.deal(user1, 10 ether);
@@ -91,7 +91,7 @@ contract AskWorldTest is Test {
         
         AskWorld.Answer memory answer = askWorld.getAnswer(1, 0);
         assertEq(answer.provider, user2);
-        assertEq(answer.audioHash, "QmHash123");
+        assertEq(answer.blobId, "QmHash123");
         assertEq(uint256(answer.status), uint256(AskWorld.AnswerStatus.PENDING));
         
         vm.stopPrank();
@@ -147,9 +147,9 @@ contract AskWorldTest is Test {
         AskWorld.Answer memory answer2 = askWorld.getAnswer(1, 1);
         
         assertEq(answer1.provider, user2);
-        assertEq(answer1.audioHash, "QmHash123");
+        assertEq(answer1.blobId, "QmHash123");
         assertEq(answer2.provider, user2);
-        assertEq(answer2.audioHash, "QmHash456");
+        assertEq(answer2.blobId, "QmHash456");
         
         // Check that question has 2 total answers
         AskWorld.Question memory question = askWorld.getQuestion(1);
@@ -171,7 +171,7 @@ contract AskWorldTest is Test {
         
         // Submit an answer with empty hash
         vm.startPrank(user2);
-        vm.expectRevert("Audio hash cannot be empty");
+        vm.expectRevert("Blob ID cannot be empty");
         askWorld.submitAnswer(1, "");
         
         vm.stopPrank();
@@ -455,11 +455,11 @@ contract AskWorldTest is Test {
         address newValidator = makeAddr("newValidator");
         
         // Add validator
-        askWorld.addAIValidator(newValidator);
+        askWorld.owner_addAIValidator(newValidator);
         assertTrue(askWorld.isAIValidator(newValidator));
         
         // Remove validator
-        askWorld.removeAIValidator(newValidator);
+        askWorld.owner_removeAIValidator(newValidator);
         assertFalse(askWorld.isAIValidator(newValidator));
     }
     
@@ -564,9 +564,9 @@ contract AskWorldTest is Test {
         AskWorld.Answer[] memory answers = askWorld.getQuestionAnswers(1);
         assertEq(answers.length, 2);
         assertEq(answers[0].provider, user2);
-        assertEq(answers[0].audioHash, "QmHash123");
+        assertEq(answers[0].blobId, "QmHash123");
         assertEq(answers[1].provider, user3);
-        assertEq(answers[1].audioHash, "QmHash456");
+        assertEq(answers[1].blobId, "QmHash456");
     }
     
     function testGetNextUnvalidatedAnswer() public {
@@ -581,12 +581,12 @@ contract AskWorldTest is Test {
         vm.stopPrank();
         
         // Get the next unvalidated answer
-        (uint256 questionId, uint256 answerIndex, address provider, string memory audioHash, uint256 submittedAt) = askWorld.getNextUnvalidatedAnswer();
+        (uint256 questionId, uint256 answerIndex, address provider, string memory blobId, uint256 submittedAt) = askWorld.getNextUnvalidatedAnswer();
         
         assertEq(questionId, 1);
         assertEq(answerIndex, 0);
         assertEq(provider, user2);
-        assertEq(audioHash, "QmHash123");
+        assertEq(blobId, "QmHash123");
         assertGt(submittedAt, 0);
     }
     
@@ -631,12 +631,12 @@ contract AskWorldTest is Test {
         vm.stopPrank();
         
         // Get the first unvalidated answer (should be from question 1)
-        (uint256 questionId, uint256 answerIndex, address provider, string memory audioHash,) = askWorld.getNextUnvalidatedAnswer();
+        (uint256 questionId, uint256 answerIndex, address provider, string memory blobId,) = askWorld.getNextUnvalidatedAnswer();
         
         assertEq(questionId, 1);
         assertEq(answerIndex, 0);
         assertEq(provider, user2);
-        assertEq(audioHash, "QmHash123");
+        assertEq(blobId, "QmHash123");
         
         // Validate the first answer
         vm.startPrank(aiValidator);
@@ -644,11 +644,11 @@ contract AskWorldTest is Test {
         vm.stopPrank();
         
         // Get the next unvalidated answer (should be from question 2)
-        (questionId, answerIndex, provider, audioHash,) = askWorld.getNextUnvalidatedAnswer();
+        (questionId, answerIndex, provider, blobId,) = askWorld.getNextUnvalidatedAnswer();
         
         assertEq(questionId, 2);
         assertEq(answerIndex, 0);
         assertEq(provider, user2);
-        assertEq(audioHash, "QmHash456");
+        assertEq(blobId, "QmHash456");
     }
 } 
